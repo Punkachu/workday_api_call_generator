@@ -2,7 +2,8 @@ from functools import wraps
 import requests
 import time
 
-# TODO: remove print with logger
+# TODO: 📋 remove print with logger
+# TODO: 📋 Use config file to inject default parameters for `retry_on_500` ?
 
 
 def retry_on_500(retries=2, delay=3):
