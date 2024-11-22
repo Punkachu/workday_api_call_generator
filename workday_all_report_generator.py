@@ -46,7 +46,7 @@ def main_master_data(input):
                 ("currency_id", lambda o: o.currency_id if o else None),
                 ("currency_id", lambda o: o.currency_id if o else None),
             ],
-            filename='CSVs/all_currencies',
+            filename='generated_csv/all_currencies',
             prod=IS_PROD
         )
         if IS_PROD:
@@ -69,7 +69,7 @@ def main_master_data(input):
                 ("company_reference_id", lambda o: o.company_reference_id if o else None),
                 ("name", lambda o: o.descriptor if o else None)
             ],
-            filename='CSVs/workday_companies',
+            filename='generated_csv/workday_companies',
             prod=IS_PROD
         )
         if IS_PROD:
@@ -92,7 +92,7 @@ def main_master_data(input):
                 ("code", lambda o: o.code if o else None),
                 ("name", lambda o: o.name if o else None),
             ],
-            filename='CSVs/spend_categories',
+            filename='generated_csv/spend_categories',
             prod=IS_PROD
         )
         if IS_PROD:
@@ -117,7 +117,7 @@ def main_master_data(input):
                 ("on_hold", lambda o: o.on_hold if o else None),
                 ("contract_type", lambda o: o.contract_type if o else None),
             ],
-            filename='CSVs/customer_contracts',
+            filename='generated_csv/customer_contracts',
             prod=IS_PROD
         )
         if IS_PROD:
@@ -139,7 +139,7 @@ def main_master_data(input):
                 ("code", lambda o: o.code if o else None),
                 ("name", lambda o: o.name if o else None),
             ],
-            filename='CSVs/regions_GTM',
+            filename='generated_csv/regions_GTM',
             prod=IS_PROD
         )
         if IS_PROD:
@@ -186,7 +186,7 @@ def main_master_data(input):
                 ("supplier_minimum_order_amount", lambda o: o.supplier_minimum_order_amount if o else None),
                 ("asn_due_in_days", lambda o: o.asn_due_in_days if o else None),
             ],
-            filename='CSVs/vendors_suppliers',
+            filename='generated_csv/vendors_suppliers',
             prod=IS_PROD
         )
         if IS_PROD:
@@ -214,7 +214,7 @@ def main_master_data(input):
                 ("payment_discount_days", lambda o: o.payment_discount_days if o else None),
                 ("payment_discount_percent", lambda o: o.payment_discount_percent if o else None),
             ],
-            filename='CSVs/payment_methods',
+            filename='generated_csv/payment_methods',
             prod=IS_PROD
         )
         if IS_PROD:
@@ -234,7 +234,7 @@ def main_master_data(input):
                 ("id", lambda o: o.internal_id if o else None),
                 ("name", lambda o: o.name if o else None),
             ],
-            filename='CSVs/companies_aka_subsidiaries',
+            filename='generated_csv/companies_aka_subsidiaries',
             prod=IS_PROD
         )
         if IS_PROD:
@@ -255,7 +255,7 @@ def main_master_data(input):
                 ("book_code", lambda o: o.book_code_id if o else None),
                 ("book_code_name", lambda o: o.name if o else None),
             ],
-            filename='CSVs/book_codes',
+            filename='generated_csv/book_codes',
             prod=IS_PROD
         )
         if IS_PROD:
@@ -284,7 +284,7 @@ def main_master_data(input):
                 ("manager_name", lambda o: o.manager.manager_name if o.manager else None),
                 ("manager_email", lambda o: o.manager.manager_email if o.manager else None),
             ],
-            filename='CSVs/cost_centers',
+            filename='generated_csv/cost_centers',
             prod=IS_PROD
         )
         if IS_PROD:
@@ -311,7 +311,7 @@ def main_master_data(input):
                 ("Ledger_Account_Types", lambda o: o.Types if o else None),
                 ("Ledger_Account_Account_Sets", lambda o: "||".join(o.Account_Sets or []) if o else None),
             ],
-            filename='CSVs/ledger_account',
+            filename='generated_csv/ledger_account',
             prod=IS_PROD
         )
         if IS_PROD:
@@ -340,7 +340,7 @@ def main_master_data(input):
                 ("country_alpha_code", lambda o: o.country_alpha_code if o else None),
                 ("location_hierarchies", lambda o: o.location_hierarchies if o else None),
             ],
-            filename='CSVs/sites',
+            filename='generated_csv/sites',
             prod=IS_PROD
         )
         if IS_PROD:
@@ -374,7 +374,7 @@ def main_master_data(input):
                 ("country_alpha_code", lambda
                     o: o.primary_work_country_address.country_alpha_code if o.primary_work_country_address else None),
             ],
-            filename='CSVs/employees',
+            filename='generated_csv/employees',
             prod=IS_PROD
         )
         if IS_PROD:
@@ -395,7 +395,7 @@ def main_master_data(input):
                 ("asset_class_id", lambda o: o.asset_class_id if o else None),
                 ("asset_class_name", lambda o: o.asset_class_name if o else None),
             ],
-            filename='CSVs/asset_categories',
+            filename='generated_csv/asset_categories',
             prod=IS_PROD
         )
         if IS_PROD:
@@ -419,7 +419,7 @@ def main_master_data(input):
                 ("organization_active", lambda o: o.organization_active if o else None),
                 ("dimension_name", lambda o: o.dimension_name if o else None),
             ],
-            filename='CSVs/GTM_organizations',
+            filename='generated_csv/GTM_organizations',
             prod=IS_PROD
         )
         if IS_PROD:
