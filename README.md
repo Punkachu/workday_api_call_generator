@@ -3,6 +3,8 @@ This project has initially been created to fit into [WORKATO](https://www.workat
 Thus the use of `Built-in` only libraries.
 You can easily improve the whole architecture and optimize the program with better external libraries.
 
+📋 Need to anonymise Test data before pushing 
+
 ## This is the repository made for all the Workday integrations. You will find the code for:
 ## - **Workday APIs** (documentation [here](https://community.workday.com/sites/default/files/file-hosting/productionapi/versions/v42.2/index.html))
 
@@ -12,7 +14,7 @@ You can easily improve the whole architecture and optimize the program with bett
 ### 1. You must use `WorkdayConnector` to fetch the `access token` as follow:
 
 ```python
-from adn_service import WorkdayConnector
+from workday.workday_implement_api import WorkdayConnector
 workday = 'wd3-impl-services1'
 tenant = 'company'  # You can change from cs1 to 4
 client_id = 'XXXXXX_client_id_XXXXXX'
