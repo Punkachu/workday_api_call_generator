@@ -9,7 +9,7 @@ from models import *
 from utils import retry_on_500
 
 import datetime
-from typing import Dict, Optional, List, Union
+from typing import Dict, Optional, List, Union, Tuple
 import xml.etree.ElementTree as ET
 
 
@@ -433,3 +433,115 @@ class WorkdayService(ABC):
 
         return csv_content
 
+
+class WorkdayRAASService(ABC):
+    """
+    Generic Service to support RAAS endpoint
+    (One export Payload answer)
+    """
+    def __init__(
+            self,
+            url: str,
+            tenant: str,
+            token: str,
+            wd_ns_value: str,  # Ex: 'urn:com.workday.report/INT-UPD-001_MasterData_Companies'
+    ):
+        self.url = url
+        self.tenant = tenant
+        self.token = token
+        # XML Parameters
+        self.wd_ns_value = wd_ns_value
+        self.raas_ns = {'wd': self.wd_ns_value}
+        self.xml_helper = XMLHelper(ns=self.raas_ns)
+        # cache Dictionary
+        self.cache: Dict[str, T] = {}
+
+    def get_raas_att_path(self, prpty: str):
+        return '{' + self.raas_ns.get('wd') + '}' + prpty
+
+    def get_tag_property_value(self, entry: ET.Element, tag_path: str, property_key: str):
+        element = entry.find(tag_path, self.raas_ns)
+        value = element.attrib.get(
+            self.get_raas_att_path(property_key)) if element else None
+
+        return value
+
+    def generate_csv(self, list_data: List[T], fields, filename: Optional[str], prod=True):
+        csv_helper = CSVExportHelper(fields=fields)
+        csv_content = csv_helper.generate_csv_content(list_data)
+        if not prod and filename:
+            csv_helper.export_to_csv(csv_content, filename)
+
+        return csv_content
+
+    @abstractmethod
+    def parse_raas_element(self, entry: ET.Element) -> Tuple[str, T]:
+        """
+        Convert XML node entry into Type T
+        :param entry: XML element Node to convert
+        :return: ID key to map the object T with its ID on the Dict
+        """
+        pass
+
+    @retry_on_500()
+    def __call_endpoint(self) -> bytes:
+        """
+        Implemented method to call an API GET endpoint and return the raw response as bytes
+
+        :return: Bytes representation of response payload
+        :raise: Raises :class:`HTTPError`
+        """
+        # Generate header
+        headers = {
+            'Content-Type': 'application/xml',
+            'Authorization': f'Bearer {self.token}'
+        }
+
+        response = requests.get(self.url, headers=headers)
+
+        response.raise_for_status()  # Raise an error for bad status codes
+
+        return response.content
+
+    def _parse_all_raas_element(self, element_entries_path: str = 'wd:Report_Entry') -> Dict[str, T]:
+        """
+        Parse the Raas Endpoint Answer
+
+        :param element_entries_path: path of the element node entries to retrieve
+        :return: Dict of key = Entity ID : T
+        """
+        # Call the Raas endpoint and get payload result
+        xml_data = self.__call_endpoint()
+
+        # Check if the input is bytes and convert to string if necessary
+        if isinstance(xml_data, bytes):
+            xml_data = self.xml_helper.bytes_to_utf8_string(xml_data)
+
+        root = ET.fromstring(xml_data)
+        namespace = self.raas_ns
+
+        element_dict: Dict[str, T] = {}
+
+        entries: List[ET.Element] = root.findall(element_entries_path, namespace)
+        print(f'Found {len(entries)} entries.')
+        for entry in entries:
+            entity_key, mapped_object = self.parse_raas_element(entry)
+
+            if entity_key:
+                element_dict.update(
+                    {
+                        entity_key: mapped_object
+                    }
+                )
+
+        return element_dict
+
+    def get_entity_dic(self) -> Dict[str, T]:
+        """
+            Call the internal function to compute all the data and return it as a dictionary of UID and their matching
+            object T
+        :return: Dict of UID and Object T
+        """
+        data = self._parse_all_raas_element()
+
+        return data
