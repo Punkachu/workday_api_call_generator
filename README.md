@@ -1,11 +1,13 @@
 # Workday Projects
+This project has initially been created to fit into [WORKATO](https://www.workato.com/) `python` actions.
+Thus the use of `Built-in` only libraries.
+You can easily improve the whole architecture and optimize the program with better external libraries.
 
 ## This is the repository made for all the Workday integrations. You will find the code for:
 ## - **Workday APIs** (documentation [here](https://community.workday.com/sites/default/files/file-hosting/productionapi/versions/v42.2/index.html))
-- Integration **INT_WD_PGM_055**
-## - **Workday FX Rate** (documentation [here](https://community.workday.com/sites/default/files/file-hosting/productionapi/Financial_Management/v42.2/Get_Currency_Conversion_Rates.html))
 
-# Workday API & Master Data Implementations:
+
+# Workday API :
 
 ### 1. You must use `WorkdayConnector` to fetch the `access token` as follow:
 
@@ -145,29 +147,6 @@ cost_center_service.generate_csv(
     )
 ```
 
-### MASTER DATA PYTHON CODE
-
-You must use `main_master_data` function and **rename** it as `main` 
-in **WORKATO** if you want to use it as master data CSV getter as follow: 
-
-```python
-if __name__ == '__main__':
-    workday = 'wd3-services1.myworkday.com'
-    tenant = 'company'
-    client_id = 'XXXX'
-    client_secret = 'XXXXX'
-    refresh_token = 'XXXXXXX'
-    # 🚨🚩⚠️ in Workato python action you must replace by `main`
-    main_master_data({
-        "workday_server": workday,
-        "workday_tenant": tenant,
-        "workday_client_id": client_id,
-        "workday_client_secret": client_secret,
-        "workday_refresh_token": refresh_token,
-        "is_test": False,
-        "integration_scope": 3
-    })
-```
 
 `integration_scope` is the integer that match which scope you want to retrieve, please refer to the GLOBAL env:
 
