@@ -284,7 +284,7 @@ def main(input):
                 ("manager_name", lambda o: o.manager.manager_name if o.manager else None),
                 ("manager_email", lambda o: o.manager.manager_email if o.manager else None),
             ],
-            filename='generated_csv/cost_centers',
+            filename='CSVs/cost_centers',
             prod=IS_PROD
         )
         if IS_PROD:
