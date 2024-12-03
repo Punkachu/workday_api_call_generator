@@ -179,6 +179,19 @@ CURRENCY = 14  # All Currencies fromn the tenant
 - #### Payment Method `GetPaymentMethod` Payment method type ([doc](https://community.workday.com/sites/default/files/file-hosting/productionapi/Financial_Management/v42.0/Get_Payment_Types.html))
 
 
+## Generate Workato executable function
+
+If you modify and edit any of the business logic files, and you want to update Workato
+Python action you can simply **UPDATE** and _USE_ the `generate_workato_script.py`.
+Here is how:
+
+```bash
+python generate_workato_script.py
+```
+
+You will have 2 generated files: `workato_journal_script.py`  and `workato_raas_script.py`.
+You can now copy paste them into Workato.
+
 ## How to run tests ?
 
 Run the `test_suite.py` under the `tests` folder, it will run all the tests from the `Workato` folder.
