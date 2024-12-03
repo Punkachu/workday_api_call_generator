@@ -1,4 +1,4 @@
-from typing import Optional, Type
+from typing import Optional, Type, Dict
 import xml.etree.ElementTree as ET
 
 from workday.models import T, WorktagsReference
@@ -6,7 +6,7 @@ from workday.models import T, WorktagsReference
 
 class XMLHelper:
 
-    def __init__(self, ns: Optional[dict[str, str]] = None, raas_ns=None):
+    def __init__(self, ns: Optional[Dict[str, str]] = None, raas_ns=None):
         self.ns = ns if ns is not None else {
             'env': 'http://schemas.xmlsoap.org/soap/envelope/',
             'wd': 'urn:com.workday/bsvc'
@@ -67,7 +67,7 @@ class XMLHelper:
     def safe_get_text(self, element, path):
         if element is not None:
             found_element = element.find(path, self.ns)
-            return found_element.text if found_element is not None else None
+            return found_element.text.replace('\n', '') if found_element is not None else None
         else:
             return None
 

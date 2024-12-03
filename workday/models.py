@@ -1,7 +1,3 @@
-""" 
-    Contains all the Models From Workday APIs.
-    Use this file to add up as many models as you want.
-"""
 from dataclasses import dataclass, field
 from typing import TypeVar, Optional, List, Any
 
@@ -69,6 +65,7 @@ class LedgerAccountReference:
 class LedgerAccount:
     # Used to complete data
     Ledger_Account_ID: str
+    WID: str
     Ledger_Account_Name: str
     Types: str
     # Ledger_Account_Summary: Optional[str]

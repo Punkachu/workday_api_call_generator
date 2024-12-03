@@ -3,7 +3,7 @@ from workday.workday_implement_api import *
 from workday.workday_raas_implementation_api import *
 
 
-def main_master_data(input):
+def main(input):
     """
     Use this main function for master data integrations
     :param input:
@@ -433,7 +433,7 @@ if __name__ == '__main__':
     client_secret = 'xxxxxxxxx-xxxxx-xxxx'
     refresh_token = 'xxxxxxxxxxxx-xxx'
 
-    main_master_data({
+    main({
         "workday_server": workday,
         "workday_tenant": tenant,
         "workday_client_id": client_id,

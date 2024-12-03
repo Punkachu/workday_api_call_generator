@@ -15,7 +15,7 @@ class CSVJournalHelper:
             ("journal_id", lambda j: j.journal_id if j else None),
             ("document_number", lambda j: j.document_info.document_number if j and j.document_info else None),
             ("accounting_period_name", lambda j: j.accounting_period_name if j else None),
-            ("document_description", lambda j: j.document_info.description if j and j.document_info else None),
+            ("document_description", lambda j: j.document_info.description.replace('\n', ' ') if j and j.document_info and j.document_info.description else None),
             ("book_code_id", lambda j: j.book_code_info.book_code_id if j and j.book_code_info else None),
             ("book_code_name", lambda j: j.book_code_info.name if j and j.book_code_info else None),
             ("ledger_code", lambda j: j.account_info.code if j and j.account_info else None),
@@ -66,7 +66,7 @@ class CSVJournalHelper:
             ("expense_type_code", lambda j: j.expense_type.code if j.expense_type else None),
             ("expense_type_name", lambda j: j.expense_type.name if j.expense_type else None),
 
-            ("memo", lambda j: j.memo),
+            ("memo", lambda j: j.memo.replace('\n', ' ') if j.memo else None),
         ]
 
         self.entries_prefix = "entry_line"

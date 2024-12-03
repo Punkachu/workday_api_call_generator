@@ -3,7 +3,7 @@ import xml.etree.ElementTree as ET
 from typing import Tuple
 
 from workday.models import *
-from workday_generator_api import WorkdayRAASService
+from workday_api_generator_call import WorkdayRAASService
 
 
 class GetRAASCompanies(WorkdayRAASService, ABC):
@@ -206,7 +206,8 @@ class GetRAASLedgerAccount(WorkdayRAASService, ABC):
             Ledger_Account_ID=ledger_account_id,
             Ledger_Account_Name=ledger_account_name,
             Types=types,
-            Account_Sets=account_sets
+            Account_Sets=account_sets,
+            WID="NA"
         )
 
         return ledger_account_id, ledger_account

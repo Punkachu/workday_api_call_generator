@@ -40,22 +40,6 @@ ASSETS = 12
 GTM_ORG = 13
 CURRENCY = 14
 
-""" 
-    START DATA CLASSES
-"""
-# 🎯 ADD CLASS HERE
-"""
-    END DATA CLASSES
-"""
-
-"""
-    ADD UTILS HERE
-"""
-# 🎯 ADD UTILS HERE
-"""
-    END ADD UTILS
-"""
-
 
 class ProcessException(Exception):
     pass
