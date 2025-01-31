@@ -1,9 +1,9 @@
 from abc import ABC
 import xml.etree.ElementTree as ET
-from typing import Tuple
+from typing import Tuple, Dict
 
-from workday.models import *
 from workday_api_generator_call import WorkdayRAASService
+from models import *
 
 
 class GetRAASCompanies(WorkdayRAASService, ABC):
@@ -168,49 +168,7 @@ class GetRAASCostCenter(WorkdayRAASService, ABC):
             referenceID=reference_id
         )
 
-        return cc_info.code, cc_info
-
-
-class GetRAASLedgerAccount(WorkdayRAASService, ABC):
-    """ Get all Ledger Accounts """
-
-    def __init__(self, base_url: str, tenant: str, token: str):
-        # Initialize the parent class (ADNService)
-        self._url = f'{base_url}/ccx/service/customreport2/{tenant}/ISU%20Workato/INT-UPL-001_MasterData_LedgerAccounts'
-
-        super().__init__(
-            self._url, tenant, token,
-            'urn:com.workday.report/Master_Data_-_Ledger_Accounts__MSA_',
-        )
-
-    def parse_raas_element(self, entry: ET.Element) -> Tuple[str, LedgerAccount]:
-        namespace = self.raas_ns
-
-        ledger_account_id = entry.find('wd:Ledger_Account_ID', namespace).text
-
-        # Correctly fetching the Ledger_Account_Name and Types using the Descriptor attribute
-        ledger_account_name_elmt = entry.find('wd:Ledger_Account_Name', namespace)
-        ledger_account_name = ledger_account_name_elmt.attrib.get(
-            self.get_raas_att_path('Descriptor')) if ledger_account_name_elmt else None
-
-        types_elmt = entry.find('wd:Types', namespace)
-        types = types_elmt.attrib.get(self.get_raas_att_path('Descriptor')) if types_elmt else None
-
-        # Fetching all Account_Sets descriptors and joining them
-        account_sets = [
-            account_set.attrib.get(self.get_raas_att_path('Descriptor'))
-            for account_set in (entry.findall('wd:Account_Sets', namespace) or [])
-        ]
-
-        ledger_account = LedgerAccount(
-            Ledger_Account_ID=ledger_account_id,
-            Ledger_Account_Name=ledger_account_name,
-            Types=types,
-            Account_Sets=account_sets,
-            WID="NA"
-        )
-
-        return ledger_account_id, ledger_account
+        return cc_info.referenceID, cc_info
 
 
 class GetRAASSites(WorkdayRAASService, ABC):
@@ -423,3 +381,170 @@ class GetRAASGeoSales(WorkdayRAASService, ABC):
         else:
             # will not be processed
             return None, None
+
+
+class GetRAASLedgerAccount(WorkdayRAASService, ABC):
+    """ Get all Ledger Accounts """
+
+    def __init__(self, base_url: str, tenant: str, token: str):
+        # Initialize the parent class (ADNService)
+        self._url = f'{base_url}/ccx/service/customreport2/{tenant}/ISU%20Workato/INT-UPL-001_MasterData_LedgerAccounts'
+
+        super().__init__(
+            self._url, tenant, token,
+            'urn:com.workday.report/Master_Data_-_Ledger_Accounts__MSA_',
+        )
+
+    @staticmethod
+    def _clean_up_string(text: str) -> str:
+        """ Remove unwanted prefix string """
+        if text and ':' in text:
+            text = text.split(':')[-1].strip()
+        return text
+
+    def parse_raas_element(self, entry: ET.Element) -> Tuple[str, LedgerAccount]:
+        ledger_account_id = self.xml_helper.get_single_tag_line_value(entry, 'wd:Ledger_Account_ID', str)
+
+        ledger_account_wid = self.xml_helper.get_single_tag_nested_value(
+            entry, 'wd:Ledger_Account', 'wd:ID[@wd:type="WID"]', str
+        )
+        ledger_account_name = self.get_tag_property_value(entry, 'wd:Ledger_Account_Name', 'Descriptor')
+        ledger_account_summary = self._clean_up_string(
+            self.get_tag_property_value(entry, 'wd:Ledger_Account_Summary', 'Descriptor')
+        )
+        ledger_account_summary_id = self.xml_helper.get_single_tag_nested_value(
+            entry, 'wd:Ledger_Account_Summary', 'wd:ID[@wd:type="Ledger_Account_Summary_ID"]', str
+        )
+        #ledger_account_type = self.get_tag_property_value(entry, 'wd:Types', 'Descriptor')
+        ledger_account_types = [
+            type_.attrib.get(self.get_raas_att_path('Descriptor'))
+            for type_ in (entry.findall('wd:Types', self.raas_ns) or [])
+        ]
+        # Fetching all Account_Sets descriptors and joining them
+        account_sets = [
+            account_set.attrib.get(self.get_raas_att_path('Descriptor'))
+            for account_set in (entry.findall('wd:Account_Sets', self.raas_ns) or [])
+        ]
+        types = "#".join(ledger_account_types)
+
+        ledger_account = LedgerAccount(
+            Ledger_Account_ID=ledger_account_id,
+            Ledger_Account_Name=ledger_account_name,
+            Ledger_Account_Summary=ledger_account_summary,
+            Ledger_Account_Summary_ID=ledger_account_summary_id,
+            Types=types,
+            Account_Sets=account_sets,
+            WID=ledger_account_wid
+        )
+
+        return ledger_account_id, ledger_account
+
+
+class GetRAASLedgerHierarchy(WorkdayRAASService, ABC):
+    """ Get all Geo Sales aka GTM Organization """
+
+    def __init__(
+            self,
+            base_url: str,
+            tenant: str,
+            token: str,
+            ledger_account_dic: Dict[str, LedgerAccount]
+    ):
+        # Initialize the parent class (ADNService)
+        self._url = f'{base_url}/ccx/service/customreport2/{tenant}/ISU%20Workato/Ledger_Account_Hierarchies_-_Management_View_Non-GAAP'
+        namespace = 'urn:com.workday.report/Ledger_Account_Hierarchies_-_Management_View_Non-GAAP'
+
+        self.ledger_account_dic = ledger_account_dic
+
+        super().__init__(self._url, tenant, token, namespace)
+
+    @staticmethod
+    def _clean_up_string(text: str) -> str:
+        """ Remove unwanted prefix string """
+        if text and ':' in text:
+            text = text.split(':')[-1].strip()
+        return text
+
+    def _extract_regular_ledger_data(self, ledger_account_id: str) -> Tuple[
+        Optional[str], Optional[str], Optional[str]]:
+        """
+        Extract the ledger account data from the other LA RAAS endpoint
+        :param ledger_account_id: the LA ID
+        :return: in this order ledger_account_summary_id, ledger_account_summary_name, ledger_account_type
+        """
+        ledger_account: Optional[LedgerAccount] = self.ledger_account_dic.get(ledger_account_id)
+
+        ledger_account_type = None
+        ledger_account_summary_name = None
+        ledger_account_summary_id = None
+
+        if ledger_account:
+            # add the fetched data
+            ledger_account_type = ledger_account.Types
+            ledger_account_summary_name = ledger_account.Ledger_Account_Summary
+            ledger_account_summary_id = ledger_account.Ledger_Account_Summary_ID
+
+        return ledger_account_summary_id, ledger_account_summary_name, ledger_account_type
+
+    def parse_raas_element(self, entry: ET.Element) -> Tuple[Optional[str], Optional[LedgerAccountHierarchy]]:
+        ledger_account_id = self.xml_helper.get_single_tag_nested_value(
+            entry, 'wd:Ledger_Account_by_Identifier', 'wd:ID[@wd:type="Ledger_Account_ID"]', str
+        )
+        ledger_account_name = self._clean_up_string(
+            self.get_tag_property_value(entry, 'wd:Ledger_Account', 'Descriptor')
+        )
+        # fetch data from Ledger Account Raas
+        ledger_account_summary_id, ledger_account_summary_name, ledger_account_type = self._extract_regular_ledger_data(
+            ledger_account_id
+        )
+
+        management_view_lvl_1_id = self._clean_up_string(
+            self.get_tag_property_value(entry, 'wd:Management_View_-_Level_1', 'Descriptor')
+        )
+        management_view_lvl_1_name = self.xml_helper.get_single_tag_nested_value(
+            entry, 'wd:Management_View_-_Level_1', 'wd:ID[@wd:type="Ledger_Account_Summary_ID"]', str
+        )
+
+        management_view_lvl_2_id = self._clean_up_string(
+            self.get_tag_property_value(entry, 'wd:Management_View_-_Level_2', 'Descriptor')
+        )
+        management_view_lvl_2_name = self.xml_helper.get_single_tag_nested_value(
+            entry, 'wd:Management_View_-_Level_2', 'wd:ID[@wd:type="Ledger_Account_Summary_ID"]', str
+        )
+
+        management_view_lvl_3_id = self._clean_up_string(
+            self.get_tag_property_value(entry, 'wd:Management_View_-_Level_3', 'Descriptor')
+        )
+        management_view_lvl_3_name = self.xml_helper.get_single_tag_nested_value(
+            entry, 'wd:Management_View_-_Level_3', 'wd:ID[@wd:type="Ledger_Account_Summary_ID"]', str
+        )
+
+        management_view_lvl_4_id = self._clean_up_string(
+            self.get_tag_property_value(entry, 'wd:Management_View_-_Level_4', 'Descriptor')
+        )
+        management_view_lvl_4_name = self.xml_helper.get_single_tag_nested_value(
+            entry, 'wd:Management_View_-_Level_4', 'wd:ID[@wd:type="Ledger_Account_Summary_ID"]', str
+        )
+
+        ledger_account_hierarchy = LedgerAccountHierarchy(
+            ledger_account_id=ledger_account_id,
+            ledger_account_name=ledger_account_name,
+
+            ledger_account_summary_id=ledger_account_summary_id,
+            ledger_account_summary_name=ledger_account_summary_name,
+            ledger_account_type=ledger_account_type,
+
+            management_view_lvl_1_id=management_view_lvl_1_id,
+            management_view_lvl_1_name=management_view_lvl_1_name,
+
+            management_view_lvl_2_id=management_view_lvl_2_id,
+            management_view_lvl_2_name=management_view_lvl_2_name,
+
+            management_view_lvl_3_id=management_view_lvl_3_id,
+            management_view_lvl_3_name=management_view_lvl_3_name,
+
+            management_view_lvl_4_id=management_view_lvl_4_id,
+            management_view_lvl_4_name=management_view_lvl_4_name,
+        )
+
+        return ledger_account_id, ledger_account_hierarchy

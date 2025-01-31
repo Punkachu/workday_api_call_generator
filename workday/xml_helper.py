@@ -125,4 +125,9 @@ class XMLHelper:
         if customer_id:
             wortakObj.customer_id = customer_id
 
+        # Item Destination
+        destination = self.safe_get_text(worktag, 'wd:ID[@wd:type="Custom_Worktag_4_ID"]')
+        if destination:
+            wortakObj.destination_id_cust_worktag_4 = destination
+
         return wortakObj

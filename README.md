@@ -157,7 +157,8 @@ ASSET_CATEGORIES = 0
 SPEND_CATEGORIES = 1
 CUSTOMER_CONTRACT = 2
 REGION_CATEGORIES = 3
-COMPANIES_CATEGORIES = 4  # aka Suppliers
+COMPANIES_CATEGORIES = 4  # Suppliers
+COMPANIES_WD = 44
 PAY_METH_CATEGORIES = 5
 SUBSIDIARIES_CATEGORIES = 6
 BOOK_CODE_CATEGORIES = 7
@@ -167,7 +168,9 @@ SITES = 10
 EMPLOYEES = 11
 ASSETS = 12
 GTM_ORG = 13
-CURRENCY = 14  # All Currencies fromn the tenant
+CURRENCY = 14
+CUSTOMERS = 15
+LEDGER_ACCOUNT_HIERARCHY = 16
 ```
 
 ## Implemented Services:
@@ -176,7 +179,10 @@ CURRENCY = 14  # All Currencies fromn the tenant
 - #### Customer contract `GetCustomerContracts` You can use it to fetch `Deals` ([doc](https://community.workday.com/sites/default/files/file-hosting/productionapi/Revenue_Management/v42.2/Get_Customer_Contracts.html#Response))
 - #### Suppliers `GetRAASSuppliers` You can use it to fetch `Companies` ([doc](https://community.workday.com/sites/default/files/file-hosting/productionapi/Resource_Management/v42.2/Get_Suppliers.html))
 - #### Journals `GetAllJournals` ([doc](https://community.workday.com/sites/default/files/file-hosting/productionapi/Financial_Management/v43.0/Get_Journals.html))
-- #### Payment Method `GetPaymentMethod` Payment method type ([doc](https://community.workday.com/sites/default/files/file-hosting/productionapi/Financial_Management/v42.0/Get_Payment_Types.html))
+- #### Payment Method `GetPaymentMethod`  ([doc](https://community.workday.com/sites/default/files/file-hosting/productionapi/Financial_Management/v42.0/Get_Payment_Types.html))
+- #### Customer Contracts `GetCustomerContracts` ([doc](https://community.workday.com/sites/default/files/file-hosting/productionapi/Revenue_Management/v43.0/Get_Customer_Contracts.html))
+- #### Customer Contracts `GetCustomerContracts` ([doc](https://community.workday.com/sites/default/files/file-hosting/productionapi/Revenue_Management/v43.0/Get_Customer_Contracts.html))
+- #### Ledger Account (Master Date) `GetRAASLedgerAccount`  ([doc](https://docs.google.com/spreadsheets/d/1ObsDQllv46CPfaSjAKfFPYa2x2IYZ3uFeqvAq8rtEVI/edit?gid=1230941409#gid=1230941409))
 
 
 ## Generate Workato executable function
@@ -189,8 +195,9 @@ Here is how:
 python generate_workato_script.py
 ```
 
-You will have 2 generated files: `workato_journal_script.py`  and `workato_raas_script.py`.
-You can now copy paste them into Workato.
+You will have 2 generated files: `workato_journal_script.py`  and `workato_raas_script.py` and `workato_journal_one_page_script.py`.
+You can now copy paste them into Workato without the main function.
+Then you can develop just like any project without making a mess into a single python file.
 
 ## How to run tests ?
 

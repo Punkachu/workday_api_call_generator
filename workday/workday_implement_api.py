@@ -3,12 +3,13 @@ from abc import ABC
 import xml.etree.ElementTree as ET
 
 from models import *
+from workday_new.workday.utils import is_timestamp_on_date
 
 
 class GetResourceCategories(WorkdayService, ABC):
     """ Get Resource Categories with resource management endpoint """
 
-    def __init__(self, base_url: str, tenant: str, token: str, api_version: str = 'v42.1'):
+    def __init__(self, base_url: str, tenant: str, token: str, api_version: str = DEFAULT_WORKDAY_API_VERSION):
         # Initialize the parent class (WorkdayService)
         self._url = f'{base_url}/ccx/service/{tenant}/Resource_Management/{api_version}'
         self.namespace = {'wd': 'urn:com.workday/bsvc'}
@@ -47,7 +48,7 @@ class GetResourceCategories(WorkdayService, ABC):
 class GetCustomerContracts(WorkdayService, ABC):
     """ Get Customer Contract aka Deals with the Revenue Management endpoint """
 
-    def __init__(self, base_url: str, tenant: str, token: str, api_version: str = 'v42.1'):
+    def __init__(self, base_url: str, tenant: str, token: str, api_version: str = DEFAULT_WORKDAY_API_VERSION):
         # Initialize the parent class (WorkdayService)
         self._url = f'{base_url}/ccx/service/{tenant}/Revenue_Management/{api_version}'
         self.namespace = {'wd': 'urn:com.workday/bsvc'}
@@ -95,7 +96,7 @@ class GetCustomerContracts(WorkdayService, ABC):
 class Region(WorkdayService, ABC):
     """ Get GTM Organization Region data (For Revenue only) """
 
-    def __init__(self, base_url: str, tenant: str, token: str, api_version: str = 'v42.1'):
+    def __init__(self, base_url: str, tenant: str, token: str, api_version: str = DEFAULT_WORKDAY_API_VERSION):
         # Initialize the parent class (WorkdayService)
         self._url = f'{base_url}/ccx/service/{tenant}/Recruiting/{api_version}'
         self.namespace = {'wd': 'urn:com.workday/bsvc'}
@@ -143,7 +144,7 @@ class GetRAASSuppliers(WorkdayService, ABC):
     def __init__(
             self, base_url: str,
             tenant: str, token: str,
-            api_version: str = 'v42.1',
+            api_version: str = DEFAULT_WORKDAY_API_VERSION,
     ):
         # Initialize the parent class (WorkdayService)
         self._url = f'{base_url}/ccx/service/{tenant}/Resource_Management/{api_version}'
@@ -260,7 +261,7 @@ class GetPaymentMethod(WorkdayService, ABC):
     https://community.workday.com/sites/default/files/file-hosting/productionapi/Financial_Management/v43.0/Get_Payment_Terms.html
      """
 
-    def __init__(self, base_url: str, tenant: str, token: str, api_version: str = 'v42.1'):
+    def __init__(self, base_url: str, tenant: str, token: str, api_version: str = DEFAULT_WORKDAY_API_VERSION):
         # Initialize the parent class (WorkdayService)
         self._url = f'{base_url}/ccx/service/{tenant}/Financial_Management/{api_version}'
         self.namespace = {'wd': 'urn:com.workday/bsvc'}
@@ -383,12 +384,154 @@ class GetCurrencies(WorkdayService, ABC):
         self.cache.update({currency.currency_id: currency})
 
 
+class GetCustomers(WorkdayService, ABC):
+    """
+        Get all Customers
+        ADN DOCUMENTATION LINK:
+        https://community.workday.com/sites/default/files/file-hosting/productionapi/Revenue_Management/v43.0/Get_Customers.html
+    """
+
+    def __init__(
+            self, base_url: str,
+            tenant: str, token: str,
+            api_version: str = DEFAULT_WORKDAY_API_VERSION,
+    ):
+        # Initialize the parent class (WorkdayService)
+        self._url = f'{base_url}/ccx/service/{tenant}/Revenue_Management/{api_version}'
+        self.namespace = {'wd': 'urn:com.workday/bsvc'}
+
+        super().__init__(self._url, tenant, token, self.namespace)
+
+    def _generate_payload_pagination(self, next_page: int, **kwargs) -> str:
+        as_of_effective_date = None
+        as_of_entry_datetime = None
+        for key, value in kwargs.items():
+            if key == 'as_of_effective_date':
+                as_of_effective_date = value
+            elif key == 'as_of_entry_datetime':
+                as_of_entry_datetime = value
+
+        _as_of_effective_date_filter: str = f"<wd:As_Of_Effective_Date>{as_of_effective_date}</wd:As_Of_Effective_Date>\r\n" if as_of_effective_date is not None else ""
+        _as_of_entry_dateTime: Optional[str] = f"<wd:As_Of_Entry_DateTime>{as_of_entry_datetime}</wd:As_Of_Entry_DateTime>\r\n" if as_of_entry_datetime is not None else ""
+
+        payload = f"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\r\n<env:Envelope\r\n    " \
+                  f"xmlns:env=\"http://schemas.xmlsoap.org/soap/envelope/\"\r\n    " \
+                  f"xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\">\r\n    <env:Body>\r\n        " \
+                  f"<wd:Get_Customers_Request xmlns:wd=\"urn:com.workday/bsvc\" wd:version=\"{self.api_version}\">\r\n            " \
+                  f"<wd:Response_Filter>\r\n                " \
+                  f"{_as_of_effective_date_filter}\r\n                " \
+                  f"{_as_of_entry_dateTime}\r\n                " \
+                  f"<wd:Page>{next_page}</wd:Page>\r\n                <wd:Count>999</wd:Count>\r\n            " \
+                  f"</wd:Response_Filter>\r\n            <wd:Response_Group>\r\n                " \
+                  f"<wd:Include_Reference>true</wd:Include_Reference>\r\n                " \
+                  f"<wd:Include_Customer_Data>true</wd:Include_Customer_Data>\r\n                " \
+                  f"<wd:Include_Customer_Balance>true</wd:Include_Customer_Balance>\r\n            " \
+                  f"</wd:Response_Group>\r\n        </wd:Get_Customers_Request>\r\n    </env:Body>\r\n</env:Envelope>"
+
+        return payload
+
+    def _get_entity_id(self, entry: ET.Element) -> Optional[str]:
+        supplier_id: str = self.xml_helper.get_single_tag_line_value(entry, 'wd:Customer_ID', str)
+        return supplier_id
+
+    def _generate_payload(self, entity_id: str, **kwargs):
+        """generate the body request payload"""
+        payload = f'''<?xml version="1.0" encoding="UTF-8"?>
+<env:Envelope
+    xmlns:env="http://schemas.xmlsoap.org/soap/envelope/"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+    <env:Body>
+        <wd:Get_Customers_Request xmlns:wd="urn:com.workday/bsvc" wd:version="{self.api_version}">
+            <wd:Request_References>
+                <wd:Customer_Reference>
+                    <wd:ID wd:type="Customer_ID">{entity_id}</wd:ID>
+                </wd:Customer_Reference>
+            </wd:Request_References>
+            <wd:Response_Group>
+                <wd:Include_Reference>true</wd:Include_Reference>
+                <wd:Include_Customer_Data>true</wd:Include_Customer_Data>
+                <wd:Include_Customer_Balance>true</wd:Include_Customer_Balance>
+            </wd:Response_Group>
+        </wd:Get_Customers_Request>
+    </env:Body>
+</env:Envelope>
+'''
+        return payload
+
+    def _parse_entity_element(self, entry: ET.Element) -> CustomerInfo:
+        """
+        Parse the Get Customer response paylaod
+
+        :param entry: XML element node
+        :return: [CustomerInfo]
+        """
+        customer_id: str = self.xml_helper.get_single_tag_line_value(entry, 'wd:Customer_ID', str)
+        Customer_Reference_ID: str = self.xml_helper.get_single_tag_line_value(entry, 'wd:Customer_Reference_ID', str)
+        Customer_Name = self.xml_helper.get_single_tag_line_value(entry, 'wd:Customer_Name', str)
+
+        Worktag_Only = bool(self.xml_helper.get_single_tag_line_value(entry, 'wd:Worktag_Only', int))
+        Submit: Optional[bool] = bool(self.xml_helper.get_single_tag_line_value(entry, 'wd:Submit', int))
+        Exempt: Optional[bool] = bool(self.xml_helper.get_single_tag_line_value(entry, 'wd:Exempt', int))
+        Exempt_From_Dunning: Optional[bool] = bool(self.xml_helper.get_single_tag_line_value(entry, 'wd:Exempt_From_Dunning', int))
+
+        Customer_Category_ID = self.xml_helper.get_single_tag_nested_value(entry, 'wd:Customer_Category_Reference',
+                                                                 'wd:ID[@wd:type="Customer_Category_ID"]', str)
+        Customer_Group_ID = self.xml_helper.get_single_tag_nested_value(
+            entry, 'wd:Customer_Group_Reference', 'wd:ID[@wd:type="Customer_Group_ID"]', str
+        )
+
+        Payment_Terms_ID = self.xml_helper.get_single_tag_nested_value(
+            entry, 'wd:Payment_Terms_Reference', 'wd:ID[@wd:type="Payment_Terms_ID"]', str
+        )
+
+        Credit_Limit = self.xml_helper.get_single_tag_line_value(entry, 'wd:Credit_Limit', float)
+        Credit_Verification_Date = self.xml_helper.get_single_tag_line_value(entry, 'wd:Credit_Verification_Date', str)
+
+        Composite_Risk_Score = self.xml_helper.get_single_tag_line_value(entry, 'wd:Composite_Risk_Score', float)
+        Composite_Risk_Date = self.xml_helper.get_single_tag_line_value(entry, 'wd:Composite_Risk_Date', str)
+        Composite_Risk_Note = self.xml_helper.get_single_tag_line_value(entry, 'wd:Composite_Risk_Note', str)
+
+        DUNS_Number = self.xml_helper.get_single_tag_line_value(entry, 'wd:DUNS_Number', str)
+
+        Customer_Satisfaction_Score = self.xml_helper.get_single_tag_line_value(entry, 'wd:Customer_Satisfaction_Score', float)
+        hierarchy_credit_limit = self.xml_helper.get_single_tag_line_value(entry, 'wd:Hierarchy_Credit_Limit', float)
+
+        return CustomerInfo(
+            Customer_ID=customer_id,
+            Customer_Reference_ID=Customer_Reference_ID,
+            Customer_Name=Customer_Name,
+            Worktag_Only=Worktag_Only,
+            Submit=Submit,
+            Customer_Group_ID=Customer_Group_ID,
+            Customer_Category_ID=Customer_Category_ID,
+            Payment_Terms_ID=Payment_Terms_ID,
+
+            Composite_Risk_Score=Composite_Risk_Score,
+            Composite_Risk_Date=Composite_Risk_Date,
+            Composite_Risk_Note=Composite_Risk_Note,
+            Customer_Satisfaction_Score=Customer_Satisfaction_Score,
+            DUNS_number=DUNS_Number,
+
+            credit_limit=Credit_Limit,
+            credit_verification_date=Credit_Verification_Date,
+            hierarchy_credit_limit=hierarchy_credit_limit,
+            Exempt_From_Dunning=Exempt_From_Dunning,
+            Exempt=Exempt
+        )
+
+    def _update_cache(self, customer: CustomerInfo):
+        self.cache.update({customer.Customer_ID: customer})
+
+
 class GetAllJournals(WorkdayService, ABC):
 
     def __init__(
             self, base_url: str,
             tenant: str,
             token: str,
+            creation_date: str,
+            filter_by_creation_date: bool,
+
             ledger_accounts: Dict[str, LedgerAccount],
             cost_centers: Dict[str, CostCenterInfo],
             subsidiaries: Dict[str, SubsidiaryInfo],
@@ -397,12 +540,16 @@ class GetAllJournals(WorkdayService, ABC):
             raas_suppliers: GetRAASSuppliers,
             resource_category_service: GetResourceCategories,
             customer_contract_service: GetCustomerContracts,
+
             api_version: str = DEFAULT_WORKDAY_API_VERSION,
     ):
         # Initialize the parent class (WorkdayService)
         self._url = f'{base_url}/ccx/service/{tenant}/Financial_Management/{api_version}'
         self.api_version = api_version
         self.namespace = {'wd': 'urn:com.workday/bsvc'}
+
+        self.filter_by_creation_date = filter_by_creation_date
+        self.creation_date = creation_date
 
         # Initialize the external data resources
         self.resource_category_service = resource_category_service
@@ -427,6 +574,8 @@ class GetAllJournals(WorkdayService, ABC):
         as_of_entry_datetime = None
         accounting_from_date = None
         accounting_to_date = None
+        count = DEFAULT_WORKDAY_COUNT_PAGINATION
+
         for key, value in kwargs.items():
             if key == 'as_of_effective_date':
                 as_of_effective_date = value
@@ -437,6 +586,8 @@ class GetAllJournals(WorkdayService, ABC):
                 accounting_from_date = value
             elif key == 'accounting_to_date':
                 accounting_to_date = value
+            elif key == 'count':
+                count = value
 
         _as_of_effective_date_filter: str = f"<wd:As_Of_Effective_Date>{as_of_effective_date}</wd:As_Of_Effective_Date>\r\n" if as_of_effective_date is not None else ""
         _as_of_entry_dateTime: Optional[
@@ -444,17 +595,26 @@ class GetAllJournals(WorkdayService, ABC):
 
         payload = f"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\r\n<env:Envelope\r\n    " \
                   f"xmlns:env=\"http://schemas.xmlsoap.org/soap/envelope/\"\r\n    " \
-                  f"xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\">\r\n    <env:Body>\r\n        " \
-                  f"<wd:Get_Journals_Request xmlns:wd=\"urn:com.workday/bsvc\" " \
-                  f"wd:version=\"{self.api_version}\">\r\n\t\t\t<wd:Request_Criteria>\r\n\t\t\t\t<wd:Accounting_From_Date>" \
-                  f"{accounting_from_date}</wd:Accounting_From_Date>\r\n\t\t\t\t<wd:Accounting_To_Date >" \
-                  f"{accounting_to_date}</wd:Accounting_To_Date>\r\n\t\t\t</wd:Request_Criteria>\r\n            " \
-                  f"<wd:Response_Filter>\r\n                {_as_of_entry_dateTime}                " \
-                  f"{_as_of_effective_date_filter}                <wd:Page>{next_page}</wd:Page>\r\n                " \
-                  f"<wd:Count>999</wd:Count>\r\n            </wd:Response_Filter>\r\n            " \
+                  f"xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\">\r\n    " \
+                  f"<env:Body>\r\n        " \
+                  f"<wd:Get_Journals_Request xmlns:wd=\"urn:com.workday/bsvc\" wd:version=\"{self.api_version}\">\r\n\t\t\t" \
+                  f"<wd:Request_Criteria>\r\n\t\t\t\t" \
+                  f"<wd:Accounting_From_Date>{accounting_from_date}</wd:Accounting_From_Date>\r\n\t\t\t\t" \
+                  f"<wd:Accounting_To_Date>{accounting_to_date}</wd:Accounting_To_Date>\r\n                " \
+                  f"<wd:Status_Reference>\r\n                    " \
+                  f"<wd:ID wd:type=\"Journal_Entry_Status_ID\">POSTED</wd:ID>\r\n                " \
+                  f"</wd:Status_Reference>\r\n\t\t\t" \
+                  f"</wd:Request_Criteria>\r\n            " \
+                  f"<wd:Response_Filter>\r\n                " \
+                  f"{_as_of_entry_dateTime}                " \
+                  f"{_as_of_effective_date_filter}" \
+                  f"<wd:Page>{next_page}</wd:Page>\r\n                " \
+                  f"<wd:Count>{count}</wd:Count>\r\n            " \
+                  f"</wd:Response_Filter>\r\n            " \
                   f"<wd:Response_Group>\r\n                " \
-                  f"<wd:Include_Attachment_Data>true</wd:Include_Attachment_Data>\r\n            " \
-                  f"</wd:Response_Group>\r\n        </wd:Get_Journals_Request>\r\n    </env:Body>\r\n</env:Envelope> "
+                  f"<wd:Include_Attachment_Data>false</wd:Include_Attachment_Data>\r\n            " \
+                  f"</wd:Response_Group>\r\n        </wd:Get_Journals_Request>\r\n    </env:Body>\r\n</env:Envelope>"
+
         return payload
 
     """ Override """
@@ -482,7 +642,7 @@ class GetAllJournals(WorkdayService, ABC):
                   f"<wd:Response_Filter>\r\n                <wd:Page>1</wd:Page>\r\n                " \
                   f"<wd:Count>999</wd:Count>\r\n            </wd:Response_Filter>\r\n            " \
                   f"<wd:Response_Group>\r\n                " \
-                  f"<wd:Include_Attachment_Data>true</wd:Include_Attachment_Data>\r\n            " \
+                  f"<wd:Include_Attachment_Data>false</wd:Include_Attachment_Data>\r\n            " \
                   f"</wd:Response_Group>\r\n        </wd:Get_Journals_Request>\r\n    </env:Body>\r\n</env:Envelope> "
         return payload
 
@@ -496,15 +656,17 @@ class GetAllJournals(WorkdayService, ABC):
         :return: [MappedJournal]
         """
         journal: Optional[JournalEntry] = self._parse_journals(entry)
-        # start converting data into Pigment Data
-        converted_journal: Optional[MappedJournal] = self._convert_all_journals_into_pigment_journals(
-            journal,
-            self.ledger_accounts,
-            self.cost_centers,
-            self.subsidiaries
-        )
 
-        return converted_journal
+        if journal:
+            # start converting data into Pigment Data
+            converted_journal: Optional[MappedJournal] = self._convert_all_journals_into_pigment_journals(
+                journal,
+                self.ledger_accounts,
+                self.cost_centers,
+                self.subsidiaries
+            )
+
+            return converted_journal
 
     """ Override """
 
@@ -522,6 +684,18 @@ class GetAllJournals(WorkdayService, ABC):
                 if converted_journal:
                     self.cache.update({journal.journalEntryReference.Accounting_Journal_ID: converted_journal})
 
+    @staticmethod
+    def callable_condition(journal: MappedJournal) -> bool:
+        """
+            Define the conditions to filter Journals:
+            # Check request from @omer Nahum Israeli Filter
+            # On Jira https://contentsquare.atlassian.net/jira/software/c/projects/II/boards/2100
+        """
+        return True
+        if journal and not journal.account_info.code == "LEDGER-3-26":
+            return True
+        return False
+
     def _map_workday_journal_to_pigment_data(
             self, journal: JournalEntry,
             ledger_accounts: Dict[str, LedgerAccount],
@@ -534,6 +708,8 @@ class GetAllJournals(WorkdayService, ABC):
             :raise ProcessException
         """
         try:
+            journal_wd_id: str = journal.journal_workday_id if journal else None
+            journal_id = journal.journalEntryReference.Accounting_Journal_ID if journal.journalEntryReference else None
             entry_journals: List[MappedEntryJournal] = []
             # Create Base Account Object
             account = AccountInfo(code=journal.ledgerReference.Ledger_Reference_ID)
@@ -548,6 +724,14 @@ class GetAllJournals(WorkdayService, ABC):
             accounting_period = journal.accounting_Date
             # Is Journal Source
             journal_source = journal.journalSourceReference.Journal_Source_ID
+            # Journal Status Reference
+            journal_status = journal.journalStatusReference.Journal_Entry_Status_ID if journal.journalStatusReference else None
+            # External Reference ID
+            external = journal.External_Reference_ID
+            # Ledger Currency is the header journal currency (Company curr)
+            ledger_currency = journal.currencyReference.Currency_ID if journal.currencyReference else None
+            # creation date
+            creation_date = journal.creation_Date
 
             for entry in journal.journalEntryLines:
                 # Expense type (Account)
@@ -567,9 +751,7 @@ class GetAllJournals(WorkdayService, ABC):
                     amount_net_usd=None,  # TODO: check with the finance team
                 )
                 # Cost center
-                cost_center_info = cost_centers.get(entry.worktagsReference.Cost_Center_Reference_ID)
-                # Revenue Line
-                # region_id: Optional[str] = entry.worktagsReference.Custom_Organization_Reference_ID
+                cost_center_info: CostCenterInfo = cost_centers.get(entry.worktagsReference.Cost_Center_Reference_ID)
 
                 # Acquisition Channel dimension
                 custom_org_ref = entry.worktagsReference.Custom_Organization_Reference_ID
@@ -598,6 +780,8 @@ class GetAllJournals(WorkdayService, ABC):
                 )
                 # Memo
                 memo = entry.memo
+                # Destination
+                destination = entry.worktagsReference.destination_id_cust_worktag_4
                 # Project Code
                 project_code = entry.worktagsReference.Project_ID
                 # Ledger Account
@@ -615,20 +799,26 @@ class GetAllJournals(WorkdayService, ABC):
                     vendor_info=vendor_line,
                     project_code=project_code,
                     memo=memo,
+                    destination=destination,
                     cash_flow_code=cash_flow_code,
                     customer_id=entry.worktagsReference.customer_id
                 )
                 entry_journals.append(entry_line)
 
             return MappedJournal(
-                journal_id=journal.journalEntryReference.Accounting_Journal_ID,
+                journal_id=journal_id,
+                journal_workday_id=journal_wd_id,
                 account_info=account,
                 book_code_info=journal.book_code,
                 document_info=document,
                 pl_info_destination=pl_info_destination,
                 accounting_period_name=accounting_period,
                 journal_source=journal_source,
-                mapped_entries=entry_journals
+                mapped_entries=entry_journals,
+                external_ref_id=external,
+                journal_status=journal_status,
+                ledger_currency=ledger_currency,
+                creation_Date=creation_date
             )
         except ProcessException as error:
             print(error)
@@ -660,9 +850,9 @@ class GetAllJournals(WorkdayService, ABC):
                 FailedProcessedJournal(
                     journal_id=journal.journalEntryReference.Accounting_Journal_ID,
                     error_message=str(perror),
-                    datetime=str(datetime.datetime.now()),
+                    datetime=str(datetime.now()),
                     reason=
-                    f'Could not concert XML data in `convert_all_journals_into_pigment_journals` at page {self.next_page - 1}'
+                    f'Could not convert XML data in `convert_all_journals_into_pigment_journals` at page {self.next_page - 1}'
                 )
             )
         except Exception as error:
@@ -671,7 +861,7 @@ class GetAllJournals(WorkdayService, ABC):
                 FailedProcessedJournal(
                     journal_id=journal.journalEntryReference.Accounting_Journal_ID,
                     error_message=str(error),
-                    datetime=str(datetime.datetime.now()),
+                    datetime=str(datetime.now()),
                     reason=
                     f'Could not extract data from XML payload in `parse_journals` at page {self.next_page - 1}'
                 )
@@ -684,226 +874,247 @@ class GetAllJournals(WorkdayService, ABC):
 
         # Extract the Journal Entry reference
         journal_entry_ref = journal_data.find('.//wd:Journal_Entry_Reference', ns)
+        workday_journal_id = self.xml_helper.safe_get_text(journal_entry_ref, 'wd:ID[@wd:type="WID"]')
         journal_id = self.xml_helper.safe_get_text(journal_entry_ref, 'wd:ID[@wd:type="Accounting_Journal_ID"]')
         journal_entry = JournalEntryReference(Accounting_Journal_ID=journal_id)
 
-        try:
-            # P & L Destination
-            custom_Worktag_4_ref = journal_data.find('.//wd:Worktags_Reference', ns)
-            custom_Worktag_4_ID = self.xml_helper.safe_get_text(custom_Worktag_4_ref,
-                                                                'wd:ID[@wd:type="Custom_Worktag_4_ID"]')
+        # Extract Journal Number
+        # journal_number = self.xml_helper.safe_get_text(journal_data, 'wd:Journal_Number')
+        journal_number = self.xml_helper.get_single_tag_line_value(journal_data, './/wd:Journal_Number', str)
 
-            # Extract Journal Number
-            # journal_number = self.xml_helper.safe_get_text(journal_data, 'wd:Journal_Number')
-            journal_number = self.xml_helper.get_single_tag_line_value(journal_data, './/wd:Journal_Number', str)
+        # Extract Creation_Date
+        creation_date = self.xml_helper.safe_get_text(journal_data, './/wd:Creation_Date')
 
-            # Get Description if present
-            journal_description = self.xml_helper.safe_get_text(journal_data, './/wd:Memo')
+        # check if the creation date is indeed on today's date
+        today_data = self.creation_date
+        is_aj_generated_today = (creation_date is not None) and is_timestamp_on_date(creation_date, today_data)
 
-            # Extract Accounting_Date
-            accounting_date = self.xml_helper.safe_get_text(journal_data, './/wd:Accounting_Date')
+        # if the flag is true to compare creation date OR if the flag is false we take the current AJ
+        if (self.filter_by_creation_date and is_aj_generated_today) or (self.filter_by_creation_date is False):
+            try:
+                # P & L Destination
+                custom_Worktag_4_ref = journal_data.find('.//wd:Worktags_Reference', ns)
+                custom_Worktag_4_ID = self.xml_helper.safe_get_text(custom_Worktag_4_ref,
+                                                                    'wd:ID[@wd:type="Custom_Worktag_4_ID"]')
 
-            # Extract Creation_Date
-            creation_date = self.xml_helper.safe_get_text(journal_data, './/wd:Creation_Date')
+                # Get Description if present
+                journal_description = self.xml_helper.safe_get_text(journal_data, './/wd:Memo')
 
-            # Extract Last_Updated_Date
-            last_updated_date = self.xml_helper.safe_get_text(journal_data, './/wd:Last_Updated_Date')
+                # External Reference ID
+                External_Reference_ID = self.xml_helper.safe_get_text(journal_data, './/wd:External_Reference_ID')
 
-            # Get Record_Quantity
-            record_quantity = self.xml_helper.safe_get_int(journal_data, './/wd:Record_Quantity')
+                # Extract Accounting_Date
+                accounting_date = self.xml_helper.safe_get_text(journal_data, './/wd:Accounting_Date')
 
-            # Get Total_Ledger_Debits
-            total_ledger_debits = self.xml_helper.safe_get_float(journal_data, './/wd:Total_Ledger_Debits')
+                # Extract Last_Updated_Date
+                last_updated_date = self.xml_helper.safe_get_text(journal_data, './/wd:Last_Updated_Date')
 
-            # Get Total_Ledger_Credits
-            total_ledger_credits = self.xml_helper.safe_get_float(journal_data, './/wd:Total_Ledger_Credits')
+                # Get Record_Quantity
+                record_quantity = self.xml_helper.safe_get_int(journal_data, './/wd:Record_Quantity')
 
-            # Extract Journal_Sequence_Number
-            journal_sequence_number = self.xml_helper.safe_get_text(journal_data, './/wd:Journal_Sequence_Number')
+                # Get Total_Ledger_Debits
+                total_ledger_debits = self.xml_helper.safe_get_float(journal_data, './/wd:Total_Ledger_Debits')
 
-            # Extract the Journal Status reference
-            journal_status_ref = journal_data.find('.//wd:Journal_Status_Reference', ns)
-            journal_status = JournalStatusReference(
-                WID=self.xml_helper.safe_get_text(journal_status_ref, 'wd:ID[@wd:type="WID"]'),
-                Journal_Entry_Status_ID=self.xml_helper.safe_get_text(journal_status_ref,
-                                                                      'wd:ID[@wd:type="Journal_Entry_Status_ID"]')
-            )
+                # Get Total_Ledger_Credits
+                total_ledger_credits = self.xml_helper.safe_get_float(journal_data, './/wd:Total_Ledger_Credits')
 
-            # Extract the Journal Book Code
-            journal_bookcode_ref = journal_data.find('.//wd:Book_Code_Reference', ns)
-            book_code_id = self.xml_helper.safe_get_text(journal_bookcode_ref, 'wd:ID[@wd:type="Book_Code_ID"]')
-            book_code = self.book_codes.get(book_code_id)
+                # Extract Journal_Sequence_Number
+                journal_sequence_number = self.xml_helper.safe_get_text(journal_data, './/wd:Journal_Sequence_Number')
 
-            # Extract Company_Reference
-            journal_comp_ref = journal_data.find('.//wd:Company_Reference', ns)
-            company_ref = CompanyReference(
-                WID=self.xml_helper.safe_get_text(journal_comp_ref, 'wd:ID[@wd:type="WID"]'),
-                Organization_Reference_ID=self.xml_helper.safe_get_text(journal_comp_ref,
-                                                                        'wd:ID[@wd:type="Organization_Reference_ID"]'),
-                Company_Reference_ID=self.xml_helper.safe_get_text(journal_comp_ref,
-                                                                   'wd:ID[@wd:type="Company_Reference_ID"]')
-            )
+                # Extract the Journal Status reference
+                journal_status_ref = journal_data.find('.//wd:Journal_Status_Reference', ns)
+                journal_status = JournalStatusReference(
+                    WID=self.xml_helper.safe_get_text(journal_status_ref, 'wd:ID[@wd:type="WID"]'),
+                    Journal_Entry_Status_ID=self.xml_helper.safe_get_text(journal_status_ref,
+                                                                          'wd:ID[@wd:type="Journal_Entry_Status_ID"]')
+                )
 
-            # Extract Currency_Reference
-            currency_ref = journal_data.find('.//wd:Currency_Reference', ns)
-            currency = CurrencyReference(
-                WID=self.xml_helper.safe_get_text(currency_ref, 'wd:ID[@wd:type="WID"]'),
-                Currency_ID=self.xml_helper.safe_get_text(currency_ref, 'wd:ID[@wd:type="Currency_ID"]'),
-                Currency_Numeric_Code=self.xml_helper.safe_get_text(currency_ref,
-                                                                    'wd:ID[@wd:type="Currency_Numeric_Code"]')
-            )
+                # Extract the Journal Book Code
+                journal_bookcode_ref = journal_data.find('.//wd:Book_Code_Reference', ns)
+                book_code_id = self.xml_helper.safe_get_text(journal_bookcode_ref, 'wd:ID[@wd:type="Book_Code_ID"]')
+                book_code = self.book_codes.get(book_code_id)
 
-            # Extract Ledger_Reference
-            ledger_ref = journal_data.find('.//wd:Ledger_Reference', ns)
-            ledger = LedgerReference(
-                WID=self.xml_helper.safe_get_text(ledger_ref, 'wd:ID[@wd:type="WID"]'),
-                Ledger_Reference_ID=self.xml_helper.safe_get_text(ledger_ref,
-                                                                  'wd:ID[@wd:type="Ledger_Reference_ID"]')
-            )
-
-            # Extract Journal_Source_Reference
-            source_ref = journal_data.find('.//wd:Journal_Source_Reference', ns)
-            journal_source = JournalSourceReference(
-                Journal_Source_ID=self.xml_helper.safe_get_text(source_ref,
-                                                                'wd:ID[@wd:type="Journal_Source_ID"]')
-            )
-
-            # Extract Ledger_Period_Reference
-            ledger_per_ref = journal_data.find('.//wd:Ledger_Period_Reference', ns)
-            ledger_period = LedgerPeriodReference(
-                WID=self.xml_helper.safe_get_text(ledger_per_ref, 'wd:ID[@wd:type="WID"]')
-            )
-
-            # Get All Journal Entry Lines
-            journal_entry_lines = journal_data.findall('.//wd:Journal_Entry_Line_Data', ns)
-            for journal_entry_line_data in journal_entry_lines:
-
-                # Extract Line_Company_Reference
-                line_company_ref = journal_entry_line_data.find('wd:Line_Company_Reference', ns)
-                line_company = LineCompanyReference(
-                    WID=self.xml_helper.safe_get_text(line_company_ref, 'wd:ID[@wd:type="WID"]'),
-                    Organization_Reference_ID=self.xml_helper.safe_get_text(line_company_ref,
+                # Extract Company_Reference
+                journal_comp_ref = journal_data.find('.//wd:Company_Reference', ns)
+                company_ref = CompanyReference(
+                    WID=self.xml_helper.safe_get_text(journal_comp_ref, 'wd:ID[@wd:type="WID"]'),
+                    Organization_Reference_ID=self.xml_helper.safe_get_text(journal_comp_ref,
                                                                             'wd:ID[@wd:type="Organization_Reference_ID"]'),
-                    Company_Reference_ID=self.xml_helper.safe_get_text(line_company_ref,
+                    Company_Reference_ID=self.xml_helper.safe_get_text(journal_comp_ref,
                                                                        'wd:ID[@wd:type="Company_Reference_ID"]')
                 )
 
-                # Extract Ledger_Account_Reference
-                ledger_acc_ref = journal_entry_line_data.find('wd:Ledger_Account_Reference', ns)
-                ledger_account = LedgerAccountReference(
-                    WID=self.xml_helper.safe_get_text(ledger_acc_ref, 'wd:ID[@wd:type="WID"]'),
-                    Ledger_Account_ID=self.xml_helper.safe_get_text(ledger_acc_ref,
-                                                                    'wd:ID[@wd:type="Ledger_Account_ID"]')
-                )
-                # Extract the Worktags_Reference with Organization_Reference_ID
-                worktags = WorktagsReference()
-                worktags_references = journal_entry_line_data.findall('.//wd:Worktags_Reference', ns)
-
-                for worktag in worktags_references:
-                    # Fill the work tags within a unique objects
-                    worktags = self.xml_helper.create_worktags_object(worktag, worktags)
-
-                # Extract Debit_Amount
-                debit_amount = self.xml_helper.safe_get_float(journal_entry_line_data, 'wd:Debit_Amount')
-
-                # Extract Credit_Amount
-                credit_amount = self.xml_helper.safe_get_float(journal_entry_line_data, 'wd:Credit_Amount')
-
-                # Extract Currency_Rate
-                currency_rate = self.xml_helper.safe_get_float(journal_entry_line_data, 'wd:Currency_Rate')
-
-                # Extract Ledger_Credit_Amount
-                ledger_Credit_Amount = self.xml_helper.safe_get_float(journal_entry_line_data,
-                                                                      'wd:Ledger_Credit_Amount')
-
-                # Extract Ledger_Debit_Amount
-                ledger_Debit_Amount = self.xml_helper.safe_get_float(journal_entry_line_data,
-                                                                     'wd:Ledger_Debit_Amount')
-
-                # Extract Exclude_from_Spend_Report
-                exclude_from_report = self.xml_helper.safe_get_int(journal_entry_line_data,
-                                                                   'wd:Exclude_from_Spend_Report')
-
-                # Extract Journal_Line_Number
-                journal_line_number = self.xml_helper.safe_get_int(journal_entry_line_data,
-                                                                   'wd:Journal_Line_Number')
-
-                # Extract Memo
-                memo = self.xml_helper.safe_get_text(journal_entry_line_data, 'wd:Memo')
-
-                # Create the JournalEntryLine object
-                journal_entry_line = JournalEntryLine(
-                    currencyReference=currency,
-                    debit_Amount=debit_amount,
-                    credit_Amount=credit_amount,
-                    lineCompanyReference=line_company,
-                    ledgerAccountReference=ledger_account,
-                    currency_Rate=currency_rate,
-                    ledger_Debit_Amount=ledger_Debit_Amount,
-                    ledger_Credit_Amount=ledger_Credit_Amount,
-                    worktagsReference=worktags,
-                    exclude_from_spend_report=exclude_from_report,
-                    journal_line_number=journal_line_number,
-                    memo=memo
+                # Extract Currency_Reference
+                currency_ref = journal_data.find('.//wd:Currency_Reference', ns)
+                ledger_currency = CurrencyReference(
+                    WID=self.xml_helper.safe_get_text(currency_ref, 'wd:ID[@wd:type="WID"]'),
+                    Currency_ID=self.xml_helper.safe_get_text(currency_ref, 'wd:ID[@wd:type="Currency_ID"]'),
+                    Currency_Numeric_Code=self.xml_helper.safe_get_text(currency_ref,
+                                                                        'wd:ID[@wd:type="Currency_Numeric_Code"]')
                 )
 
-                # Add the entry line to the list
-                entry_lines.append(journal_entry_line)
-
-            # Create a JournalEntry object and append it to the list
-            journal = JournalEntry(
-                journalEntryReference=journal_entry,
-                accounting_Date=accounting_date,
-                book_code=book_code,
-                description=journal_description,
-                custom_Worktag_4_ID=custom_Worktag_4_ID,  # Todo Test 🧪
-                journal_Number=journal_number,
-                currencyReference=currency,
-                ledgerReference=ledger,
-                companyReference=company_ref,
-                journalStatusReference=journal_status,
-                journal_Sequence_Number=journal_sequence_number,
-                record_Quantity=record_quantity,
-                journalSourceReference=journal_source,
-                total_Ledger_Debits=total_ledger_debits,
-                total_ledger_credits=total_ledger_credits,
-                creation_Date=creation_date,
-                last_Updated_Date=last_updated_date,
-                ledgerPeriodReference=ledger_period,
-                journalEntryLines=entry_lines
-            )
-            return journal
-        except Exception as error:
-            self.failed_journals.append(
-                FailedProcessedJournal(
-                    journal_id=journal_entry.Accounting_Journal_ID,
-                    error_message=str(error),
-                    datetime=str(datetime.datetime.now()),
-                    reason=
-                    f'Could not extract data from XML payload in `parse_journals` at page {self.next_page - 1}'
+                # Extract Ledger_Reference
+                ledger_ref = journal_data.find('.//wd:Ledger_Reference', ns)
+                ledger = LedgerReference(
+                    WID=self.xml_helper.safe_get_text(ledger_ref, 'wd:ID[@wd:type="WID"]'),
+                    Ledger_Reference_ID=self.xml_helper.safe_get_text(ledger_ref,
+                                                                      'wd:ID[@wd:type="Ledger_Reference_ID"]')
                 )
-            )
+
+                # Extract Journal_Source_Reference
+                source_ref = journal_data.find('.//wd:Journal_Source_Reference', ns)
+                journal_source = JournalSourceReference(
+                    Journal_Source_ID=self.xml_helper.safe_get_text(source_ref,
+                                                                    'wd:ID[@wd:type="Journal_Source_ID"]')
+                )
+
+                # Extract Ledger_Period_Reference
+                ledger_per_ref = journal_data.find('.//wd:Ledger_Period_Reference', ns)
+                ledger_period = LedgerPeriodReference(
+                    WID=self.xml_helper.safe_get_text(ledger_per_ref, 'wd:ID[@wd:type="WID"]')
+                )
+
+                # Get All Journal Entry Lines
+                journal_entry_lines = journal_data.findall('.//wd:Journal_Entry_Line_Data', ns)
+                for journal_entry_line_data in journal_entry_lines:
+
+                    # Extract Line_Company_Reference
+                    line_company_ref = journal_entry_line_data.find('wd:Line_Company_Reference', ns)
+                    line_company = LineCompanyReference(
+                        WID=self.xml_helper.safe_get_text(line_company_ref, 'wd:ID[@wd:type="WID"]'),
+                        Organization_Reference_ID=self.xml_helper.safe_get_text(line_company_ref,
+                                                                                'wd:ID[@wd:type="Organization_Reference_ID"]'),
+                        Company_Reference_ID=self.xml_helper.safe_get_text(line_company_ref,
+                                                                           'wd:ID[@wd:type="Company_Reference_ID"]')
+                    )
+
+                    # Extract Ledger_Account_Reference
+                    ledger_acc_ref = journal_entry_line_data.find('wd:Ledger_Account_Reference', ns)
+                    ledger_account = LedgerAccountReference(
+                        WID=self.xml_helper.safe_get_text(ledger_acc_ref, 'wd:ID[@wd:type="WID"]'),
+                        Ledger_Account_ID=self.xml_helper.safe_get_text(ledger_acc_ref,
+                                                                        'wd:ID[@wd:type="Ledger_Account_ID"]')
+                    )
+                    # Extract the Worktags_Reference with Organization_Reference_ID
+                    worktags = WorktagsReference()
+                    worktags_references = journal_entry_line_data.findall('.//wd:Worktags_Reference', ns)
+
+                    for worktag in worktags_references:
+                        # Fill the work tags within a unique objects
+                        worktags = self.xml_helper.create_worktags_object(worktag, worktags)
+
+                    # Extract Debit_Amount
+                    debit_amount = self.xml_helper.safe_get_float(journal_entry_line_data, 'wd:Debit_Amount')
+
+                    # Extract Credit_Amount
+                    credit_amount = self.xml_helper.safe_get_float(journal_entry_line_data, 'wd:Credit_Amount')
+
+                    # Extract Currency_Rate
+                    currency_rate = self.xml_helper.safe_get_float(journal_entry_line_data, 'wd:Currency_Rate')
+
+                    # Extract Ledger_Credit_Amount
+                    ledger_Credit_Amount = self.xml_helper.safe_get_float(journal_entry_line_data,
+                                                                          'wd:Ledger_Credit_Amount')
+
+                    # Extract Ledger_Debit_Amount
+                    ledger_Debit_Amount = self.xml_helper.safe_get_float(journal_entry_line_data,
+                                                                         'wd:Ledger_Debit_Amount')
+
+                    # Extract Exclude_from_Spend_Report
+                    exclude_from_report = self.xml_helper.safe_get_int(journal_entry_line_data,
+                                                                       'wd:Exclude_from_Spend_Report')
+
+                    # Extract Journal_Line_Number
+                    journal_line_number = self.xml_helper.safe_get_int(journal_entry_line_data,
+                                                                       'wd:Journal_Line_Number')
+
+                    # Extract Memo
+                    memo = self.xml_helper.safe_get_text(journal_entry_line_data, 'wd:Memo')
+
+                    # Extract Currency_Reference
+                    currency_ref = journal_data.find('.//wd:Currency_Reference', ns)
+                    home_currency = CurrencyReference(
+                        WID=self.xml_helper.safe_get_text(currency_ref, 'wd:ID[@wd:type="WID"]'),
+                        Currency_ID=self.xml_helper.safe_get_text(currency_ref, 'wd:ID[@wd:type="Currency_ID"]'),
+                        Currency_Numeric_Code=self.xml_helper.safe_get_text(currency_ref,
+                                                                            'wd:ID[@wd:type="Currency_Numeric_Code"]')
+                    )
+
+                    # Create the JournalEntryLine object
+                    journal_entry_line = JournalEntryLine(
+                        currencyReference=home_currency,
+                        debit_Amount=debit_amount,
+                        credit_Amount=credit_amount,
+                        lineCompanyReference=line_company,
+                        ledgerAccountReference=ledger_account,
+                        currency_Rate=currency_rate,
+                        ledger_Debit_Amount=ledger_Debit_Amount,
+                        ledger_Credit_Amount=ledger_Credit_Amount,
+                        worktagsReference=worktags,
+                        exclude_from_spend_report=exclude_from_report,
+                        journal_line_number=journal_line_number,
+                        memo=memo,
+                    )
+
+                    # Add the entry line to the list
+                    entry_lines.append(journal_entry_line)
+
+                # Create a JournalEntry object and append it to the list
+                journal = JournalEntry(
+                    journal_workday_id=workday_journal_id,
+                    journalEntryReference=journal_entry,
+                    accounting_Date=accounting_date,
+                    book_code=book_code,
+                    description=journal_description,
+                    custom_Worktag_4_ID=custom_Worktag_4_ID,  # Todo Test 🧪
+                    journal_Number=journal_number,
+                    currencyReference=ledger_currency,
+                    ledgerReference=ledger,
+                    companyReference=company_ref,
+                    journalStatusReference=journal_status,
+                    journal_Sequence_Number=journal_sequence_number,
+                    record_Quantity=record_quantity,
+                    journalSourceReference=journal_source,
+                    total_Ledger_Debits=total_ledger_debits,
+                    total_ledger_credits=total_ledger_credits,
+                    creation_Date=creation_date,
+                    last_Updated_Date=last_updated_date,
+                    ledgerPeriodReference=ledger_period,
+                    journalEntryLines=entry_lines,
+                    External_Reference_ID=External_Reference_ID
+                )
+                return journal
+            except Exception as error:
+                self.failed_journals.append(
+                    FailedProcessedJournal(
+                        journal_id=journal_entry.Accounting_Journal_ID,
+                        error_message=str(error),
+                        datetime=str(datetime.datetime.now()),
+                        reason=
+                        f'Could not extract data from XML payload in `parse_journals` at page {self.next_page - 1}'
+                    )
+                )
+        else:
+            #print(f"AJ: {workday_journal_id}/{journal_id}/{journal_number} has created date on {creation_date} for {today_data} => REJECTED 🚫")
+            self.outdated_counter += 1
+            return None
 
     @staticmethod
-    def split_csv_content(csv_content: str, line_number: int, with_header: bool = False) -> List[str]:
+    def split_csv_content(csv_content: str, line_number: int) -> List[str]:
         """
         Split up the csv content when the file is `large`
         :param csv_content: Full CSV size
         :param line_number: Number of line you want to start splitting up the file
-        :param with_header: Variable to keep headers or not
         :return: List of CSV chunks
         """
         # Split the CSV content into lines
         lines = csv_content.strip().split('\n')
-        # Extract the header (the first line of the CSV)
-        header = lines[0]
+        # Extract the header and the rest of the lines
+        header, lines = lines[0], lines[1:]
         # Split the lines into chunks of 'line_number' size
-        chunks = [lines[i:i + line_number] for i in range(0 if with_header else 1, len(lines), line_number)]
+        chunks = [lines[i:i + line_number] for i in range(0, len(lines), line_number)]
         # Join each chunk back into a CSV string
-        if with_header:
-            csv_chunks = ['\n'.join([header] + chunk) for chunk in chunks]
-        else:
-            csv_chunks = ['\n'.join(chunk) for chunk in chunks]
+        csv_chunks = ['\n'.join([header] + chunk) for chunk in chunks]
 
         return csv_chunks
 

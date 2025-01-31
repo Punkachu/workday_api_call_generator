@@ -8,19 +8,20 @@ from abc import ABC, abstractmethod
 from models import *
 from utils import retry_on_500
 
-import datetime
-from typing import Dict, Optional, List, Union, Tuple
+from datetime import datetime
+from typing import Dict, Optional, List, Union, Tuple, Callable
 import xml.etree.ElementTree as ET
-
 
 import requests
 
+from workday_new.workday.csv_helpers import CSVExportHelper
+from workday_new.workday.xml_helper import XMLHelper
 
-from workday.xml_helper import XMLHelper
-from workday.csv_helpers import CSVExportHelper
+
 
 DEFAULT_NUM_ROW_LIMIT = 40000
-DEFAULT_WORKDAY_API_VERSION = 'v42.1'
+DEFAULT_WORKDAY_API_VERSION = 'v43.1'
+DEFAULT_WORKDAY_COUNT_PAGINATION = 999
 
 """Master Data Scope """
 ASSET_CATEGORIES = 0
@@ -39,6 +40,8 @@ EMPLOYEES = 11
 ASSETS = 12
 GTM_ORG = 13
 CURRENCY = 14
+CUSTOMERS = 15
+LEDGER_ACCOUNT_HIERARCHY = 16
 
 
 class ProcessException(Exception):
@@ -49,7 +52,10 @@ class WorkdayConnector:
     """
     Access token generator class
     """
-    def __init__(self, workday, tenant, client_id, client_secret, refresh_token, version='v42.1', xml_version='1.0'):
+    def __init__(
+            self, workday, tenant, client_id, client_secret, refresh_token,
+            version=DEFAULT_WORKDAY_API_VERSION, xml_version='1.0'
+    ):
         self.workday = workday
         self.tenant = tenant
         self.client_id = client_id
@@ -120,10 +126,11 @@ class WorkdayService(ABC):
 
         self.all_entity: List[T] = []
         self.failed_entity: List[FailedProcessedJournal] = []
+        self.outdated_counter = 0
 
     # ABSTRACT METHODS
     @abstractmethod
-    def _parse_entity_element(self, entry: ET.Element) -> T:
+    def _parse_entity_element(self, entry: ET.Element) -> Optional[T]:
         """
             Abstract method to parse an XML element data node and return an entity of type T
         :param entry: Entity Node element
@@ -166,6 +173,20 @@ class WorkdayService(ABC):
         :return: String representation of the UID of the current entity, None in case of failure
         """
         pass
+
+    @staticmethod
+    def filter_objects(items: List[T], condition: Callable[[T], bool]) -> List[T]:
+        """
+        Filter a list of objects of type T based on a condition.
+
+        Parameters:
+            items (List[T]): The list of objects to filter.
+            condition (Callable[[T], bool]): A function that defines the filter condition.
+
+        Returns:
+            List[T]: A list of objects that satisfy the condition.
+        """
+        return list(filter(condition, items))
 
     # Internal Methods
     @retry_on_500()
@@ -227,7 +248,7 @@ class WorkdayService(ABC):
                     # add the entity
                     entities.append(element)
                     # update the cache with a new value
-                    self._update_cache(element)
+                    #self._update_cache(element)
 
             # Assert to check that the list contains only one element
             error_message = f"Expected list to contain exactly one element, but it has {len(entities)} elements."
@@ -275,6 +296,7 @@ class WorkdayService(ABC):
 
         return None
 
+
     # METHOD FOR GETTING ALL THE ENTITIES FROM ALL THE PAGINATION
     def __parse_all_entities_page(self, xml_input: Union[str, bytes], entity_entry_data_path: str) -> List[T]:
         # Check if the input is bytes and convert to string if necessary
@@ -285,21 +307,23 @@ class WorkdayService(ABC):
         ns = self.namespace
 
         root_entry_data = root.findall(entity_entry_data_path, ns)
-        print(len(root_entry_data))
+        #print(len(root_entry_data))
 
         parsed_entities = []
 
         for entry_data_ in root_entry_data:
             try:
                 parsed_entry: Optional[T] = self._parse_entity_element(entry_data_)
-                parsed_entities.append(parsed_entry)
+                if parsed_entry is not None:
+                    parsed_entities.append(parsed_entry)
             except Exception as error:
+                print(error)
                 self.failed_entity.append(
                     FailedProcessedJournal(
                         journal_id=self._get_entity_id(entry_data_),
                         data=str(entry_data_),
                         error_message=str(error),
-                        datetime=str(datetime.datetime.now()),
+                        datetime=str(datetime.now()),
                         reason=
                         f'Could not extract data from XML payload in `parse_journals` at page {self.next_page - 1}'
                     )
@@ -370,7 +394,7 @@ class WorkdayService(ABC):
         self.all_entity = []
         # generate payload
         payload = self._generate_payload_pagination(self.next_page, **kwargs)
-        print(f'payload: {payload}')
+        #print(f'payload: {payload}')
         response_content = self.__call_endpoint('POST', payload)
 
         # Check for the result page data in the response
@@ -399,13 +423,49 @@ class WorkdayService(ABC):
 
         # Now `all_fx_rates` contains all the FX rates retrieved across all pages
         print(f"Total Journals fetched: {len(self.all_entity)}")
-        self.is_complete = len(self.all_entity) == self.total_record
+        self.is_complete = (len(self.all_entity) + self.outdated_counter) == self.total_record
         print(f"Is Complete: {self.is_complete}")
         if not self.is_complete:
             print(f"The number found is {self.total_record}, but fetch {len(self.all_entity)} records.")
         print("OK")
 
         return self.all_entity
+
+    def get_all_entities_by_page(
+            self,
+            entity_entry_data_path: str,
+            page: int,
+            entity_count: int = 999,
+            **kwargs
+    ) -> List[T]:
+        """
+        Get all entities by page (use in case of a huge workload)
+        :param page: Page number to parse
+        :param entity_count: entity to retrieve by page, default 999
+        :param entity_entry_data_path: The XML path element that holds the entry data e.g: './/wd:Journal_Entry_Data'
+        :param kwargs: optional argument which might be used for forging the payload
+        :return: List of converted entry into object type T
+        """
+        # First call, get the first page
+        # generate payload
+        payload = self._generate_payload_pagination(page, count=entity_count, **kwargs)
+        print(f'payload: {payload}')
+        response_content = self.__call_endpoint('POST', payload)
+        # Check for the result page data in the response
+        next_page_data = self.__extract_response_results(response_content)
+        self.total_page = next_page_data.total_pages
+        self.total_record = next_page_data.total_results
+        # get results
+        entities = self.__parse_all_entities_page(response_content, entity_entry_data_path)
+        print(f'Parsed: {len(entities)} entities over {self.total_page}')
+
+        self.is_complete = len(entities) == entity_count or len(entities) == self.total_record % entity_count
+        print(f"Is Complete: {self.is_complete}")
+        if not self.is_complete:
+            print(f"The number found {self.total_page}, but fetch {len(entities)} records.")
+        else:
+            print("OK")
+        return entities
 
     @staticmethod
     def generate_csv(list_data: List[T], fields, filename: Optional[str], prod=True):
@@ -529,3 +589,4 @@ class WorkdayRAASService(ABC):
         data = self._parse_all_raas_element()
 
         return data
+

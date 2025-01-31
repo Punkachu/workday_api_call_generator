@@ -1,10 +1,13 @@
-import time
+"""
+This entry point must be used for the Busy workload process only
+When you hit the maximum amount
+"""
 
+import time
 from workday.csv_helpers import CSVJournalHelper
-from workday.workday_api_generator_call import *
 from workday.workday_implement_api import *
 from workday.workday_raas_implementation_api import *
-from workday_new.workday.utils import *
+from workday.utils import *
 
 
 def main(input):
@@ -21,13 +24,14 @@ def main(input):
     client_secret = input['workday_client_secret']
     refresh_token = input['workday_refresh_token']
 
-    accounting_from_date = input['accounting_from_date']
-    accounting_to_date = input['accounting_to_date']
-    # in order to make sure we retrieve all the journals for the required date
-    as_of_effective_date = f"{str(transform_and_adjust_date(accounting_from_date, days=-1))}T00:00:00.000"
+    # Get the query Argument
+    accounting_date = input['date']
+    page = int(input['page'])
+    count = int(input['count'])
 
-    # filter_by_creation_date = input.get('filter_by_creation_date', True)
     filter_by_creation_date = str(input.get('filter_by_creation_date', "true")) == "true"
+    # in order to make sure we retrieve all the journals for the required date
+    as_of_effective_date = f"{str(transform_and_adjust_date(accounting_date, days=-1))}T00:00:00.000"
 
     is_test = False if (input.get("is_test") or "") == "false" else True
     _DEFAULT_WORKDAY_API_VERSION = input.get("api_version") or DEFAULT_WORKDAY_API_VERSION
@@ -74,7 +78,7 @@ def main(input):
         tenant=connector.tenant,
         token=connector.access_token,
 
-        creation_date=accounting_from_date,
+        creation_date=accounting_date,
         filter_by_creation_date=filter_by_creation_date,
 
         api_version=connector.version,
@@ -90,27 +94,27 @@ def main(input):
         customer_contract_service=customer_contract_service,
     )
 
-    journals: List[MappedJournal] = get_all_journals.get_all_entities(
+    journals: List[MappedJournal] = get_all_journals.get_all_entities_by_page(
         './/wd:Journal_Entry_Data',
-        accounting_from_date=accounting_from_date,
-        accounting_to_date=accounting_to_date,
+        page=page,
+        entity_count=count,
+        accounting_from_date=accounting_date,
+        accounting_to_date=accounting_date,
         as_of_effective_date=as_of_effective_date,
     )
 
     scv_helper = CSVJournalHelper()
     total_journals = len(journals)
-    print(f"journals transformed: {total_journals}")
 
     if total_journals > 0:
         # 🔎🕵🏽 filter Journals, check override `callable_condition` function in [workday_implementation_api.py]
         journals = get_all_journals.filter_objects(journals, get_all_journals.callable_condition)
-        print(f"journals Filtered: {len(journals)}")
         csv_content = scv_helper.mapped_journals_to_csv(journals)
 
         if is_test:
             scv_helper.export_to_csv(
                 csv_content,
-                f'accounting_journal_{accounting_from_date[0:10]}_to_{accounting_to_date[0:10]}'
+                f'accounting_journal_{accounting_date[0:10]}'
             )
 
         # Split up csv into several chunks
@@ -126,78 +130,47 @@ def main(input):
         return {
             "journals_csv_contents": csvs,
             # return process errors and parse error
-            "journals_error": [data for data in get_all_journals.failed_journals]
+            "journals_error": [data for data in get_all_journals.failed_journals],
+            "has_end": total_journals == 0
         }
     else:
         return {
             "journals_csv_contents": [],  # empty list when nothing is found
             # return process errors and parse error
-            "journals_error": [data for data in get_all_journals.failed_journals]
+            "journals_error": [data for data in get_all_journals.failed_journals],
+            "has_end": True
         }
 
 
-
 if __name__ == '__main__':
-    workday = 'workday.com'
-    tenant = 'Tenant'
-    client_id = 'XXXXXXXXX'
-    client_secret = 'CXXXXXXXXX-XXXXXXX-XXXXXXX'
-    refresh_token = 'XXXXXXX-XXXXXX-XXXXXXXX-XXXXX'
+    workday = 'cmpny.workday.com'
+    tenant = 'company'
+    client_id = 'xxxxxxxxx'
+    client_secret = 'xxxxxxxxxxxxxxxxxxxxxx'
+    refresh_token = 'xxxxxxxxxxxxxxXXXXXXXxxxxxXXXXXXXXX'
 
     filter_by_creation_date = "true"
-    accounting_from_date = "2025-01-20"
-    accounting_to_date = ""
-    days = 4  # Number of days to loop
 
     # Start the timer
     start_time = time.time()
 
-    if filter_by_creation_date == "true":
+    res = main({
+      "date": "2025-01-01",
+      "page": 1,
+      "count": 999,
+      "num_row_limit": 40000,
+      "filter_by_creation_date": filter_by_creation_date,
 
-        start_date = accounting_from_date
-        dates = loop_over_date(start_date, days)
+      "workday_server": workday,
+      "workday_tenant": tenant,
+      "workday_client_id": client_id,
+      "workday_client_secret": client_secret,
+      "workday_refresh_token": refresh_token,
 
-        print("Dates:")
-        csv_files = []
-        for date in dates:
-            print(f"🚀 Parsing for: {date}")
-
-            csv_files.append(f"accounting_journal_{date}_to_{date}_journal_entries.csv")
-
-            res = main({
-                "accounting_from_date": date,
-                "accounting_to_date": date,
-                "workday_server": workday,
-                "workday_tenant": tenant,
-                "workday_client_id": client_id,
-                "workday_client_secret": client_secret,
-                "workday_refresh_token": refresh_token,
-                "is_test": "true",
-                "num_row_limit": 40000,
-                "filter_by_creation_date": filter_by_creation_date,
-            })
-
-            print(res['journals_error'])
-
-            if len(dates):
-                output_file = f"accounting_journal_{dates[0]}_to_{dates[-1]}_journal_entries.csv"
-                merge_csv_files(csv_files, output_file)
-    else:
-        res = main({
-            "accounting_from_date": accounting_from_date,
-            "accounting_to_date": accounting_to_date,
-            "workday_server": workday,
-            "workday_tenant": tenant,
-            "workday_client_id": client_id,
-            "workday_client_secret": client_secret,
-            "workday_refresh_token": refresh_token,
-            "is_test": "true",
-            "filter_by_creation_date": filter_by_creation_date,
-        })
-        print(res['journals_error'])
-
+      "is_test": "true",
+    })
     # End the timer
     end_time = time.time()
-
     execution_time = end_time - start_time
     print(f"Execution time: {execution_time} seconds")
+    print(res['journals_error'])

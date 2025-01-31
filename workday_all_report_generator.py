@@ -1,4 +1,3 @@
-from workday.workday_api_generator_call import *
 from workday.workday_implement_api import *
 from workday.workday_raas_implementation_api import *
 
@@ -24,6 +23,78 @@ def main(input):
 
     connector = WorkdayConnector(workday, tenant, client_id, client_secret, refresh_token)
     connector.acquire_token()
+
+    """LEDGER ACCOUNT"""
+    if generate_all or LEDGER_ACCOUNT == integration_scope:
+        ledger_account_service = GetRAASLedgerAccount(
+            base_url=connector.base_uri,
+            token=connector.access_token,
+            tenant=tenant,
+        )
+        ledger_accounts: Dict[str, LedgerAccount] = ledger_account_service.get_entity_dic()
+        print(ledger_accounts)
+        ledger_accounts_list: List[LedgerAccount] = list(ledger_accounts.values())
+        # @Omer asked `take only the "Corporate COA || Corporate COA Child" in the column Ledger_Account_Account_Sets`
+        # From: https://docs.google.com/spreadsheets/d/1ObsDQllv46CPfaSjAKfFPYa2x2IYZ3uFeqvAq8rtEVI
+        filtered_ledger_account = [la for la in ledger_accounts_list if
+                                   'Corporate COA' in la.Account_Sets and 'Corporate COA Child' in la.Account_Sets]
+        csv_content: str = ledger_account_service.generate_csv(
+            filtered_ledger_account,
+            [
+                ("Ledger_Account_WD_ID", lambda o: o.WID if o else None),
+                ("Ledger_Account_ID", lambda o: o.Ledger_Account_ID if o else None),
+                ("Ledger_Account_Name", lambda o: o.Ledger_Account_Name if o else None),
+                ("Ledger_Account_Types", lambda o: o.Types if o else None),
+                ("Ledger_Account_Summary_ID", lambda o: o.Ledger_Account_Summary_ID if o else None),
+                ("Ledger_Account_Summary", lambda o: o.Ledger_Account_Summary if o else None),
+                ("Ledger_Account_Account_Sets", lambda o: "||".join(o.Account_Sets or []) if o else None),
+            ],
+            filename='generated_csv/ledger_account',
+            prod=IS_PROD
+        )
+        if IS_PROD:
+            return {"master_data_csv": csv_content}
+
+
+    """LEDGER_ACCOUNT_HIERARCHY"""
+    if generate_all or LEDGER_ACCOUNT_HIERARCHY == integration_scope:
+        ledger_account_service = GetRAASLedgerAccount(
+            base_url=connector.base_uri,
+            token=connector.access_token,
+            tenant=tenant,
+        )
+
+        ledger_acc_hierarchies_service = GetRAASLedgerHierarchy(
+            base_url=connector.base_uri,
+            token=connector.access_token,
+            tenant=tenant,
+            ledger_account_dic=ledger_account_service.get_entity_dic(),
+        )
+
+        ledger_acc_hierarchies: Dict[str, LedgerAccountHierarchy] = ledger_acc_hierarchies_service.get_entity_dic()
+        print(ledger_acc_hierarchies)
+        csv_content: str = ledger_acc_hierarchies_service.generate_csv(
+            list(ledger_acc_hierarchies.values()),
+            [
+                ("ledger_account_id", lambda o: o.ledger_account_id if o else None),
+                ("ledger_account_name", lambda o: o.ledger_account_name if o else None),
+
+                ("ledger_account_summary_id", lambda o: o.ledger_account_summary_id if o else None),
+                ("ledger_account_summary_name", lambda o: o.ledger_account_summary_name if o else None),
+                ("ledger_account_type", lambda o: o.ledger_account_type if o else None),
+
+                ("management_view_lvl_1_id", lambda o: o.management_view_lvl_1_id if o else None),
+                ("management_view_lvl_2_id", lambda o: o.management_view_lvl_2_id if o else None),
+                ("management_view_lvl_3_id", lambda o: o.management_view_lvl_3_id if o else None),
+                ("management_view_lvl_3_name", lambda o: o.management_view_lvl_3_name if o else None),
+                ("management_view_lvl_4_id", lambda o: o.management_view_lvl_4_id if o else None),
+                ("management_view_lvl_4_name", lambda o: o.management_view_lvl_4_name if o else None),
+            ],
+            filename='generated_csv/ledger_account_hierarchy',
+            prod=IS_PROD
+        )
+        if IS_PROD:
+            return {"master_data_csv": csv_content}
 
     """CURRENCY CATEGORY"""
     if generate_all or CURRENCY == integration_scope:
@@ -284,34 +355,7 @@ def main(input):
                 ("manager_name", lambda o: o.manager.manager_name if o.manager else None),
                 ("manager_email", lambda o: o.manager.manager_email if o.manager else None),
             ],
-            filename='CSVs/cost_centers',
-            prod=IS_PROD
-        )
-        if IS_PROD:
-            return {"master_data_csv": csv_content}
-
-    """LEDGER ACCOUNT"""
-    if generate_all or LEDGER_ACCOUNT == integration_scope:
-        ledger_account_service = GetRAASLedgerAccount(
-            base_url=connector.base_uri,
-            token=connector.access_token,
-            tenant=tenant,
-        )
-        ledger_accounts: Dict[str, LedgerAccount] = ledger_account_service.get_entity_dic()
-        print(ledger_accounts)
-        ledger_accounts_list: List[LedgerAccount] = list(ledger_accounts.values())
-        # @Omer asked `take only the "Corporate COA || Corporate COA Child" in the column Ledger_Account_Account_Sets`
-        # From: https://docs.google.com/spreadsheets/d/1ObsDQllv46CPfaSjAKfFPYa2x2IYZ3uFeqvAq8rtEVI
-        filtered_ledger_account = [la for la in ledger_accounts_list if 'Corporate COA' in la.Account_Sets and 'Corporate COA Child' in la.Account_Sets]
-        csv_content: str = ledger_account_service.generate_csv(
-            filtered_ledger_account,
-            [
-                ("Ledger_Account_ID", lambda o: o.Ledger_Account_ID if o else None),
-                ("Ledger_Account_Name", lambda o: o.Ledger_Account_Name if o else None),
-                ("Ledger_Account_Types", lambda o: o.Types if o else None),
-                ("Ledger_Account_Account_Sets", lambda o: "||".join(o.Account_Sets or []) if o else None),
-            ],
-            filename='generated_csv/ledger_account',
+            filename='generated_csv/cost_centers',
             prod=IS_PROD
         )
         if IS_PROD:
@@ -425,6 +469,48 @@ def main(input):
         if IS_PROD:
             return {"master_data_csv": csv_content}
 
+    """ CUSTOMERS """
+    if generate_all or CUSTOMERS == integration_scope:
+        currency_service = GetCustomers(
+            base_url=connector.base_uri,
+            token=connector.access_token,
+            tenant=tenant,
+            api_version=_DEFAULT_WORKDAY_API_VERSION,
+        )
+
+        #customer_401 = currency_service.search_entity('C-LE401', './/wd:Customer_Data')
+        #print(customer_401)
+        all_customers = currency_service.get_all_entities('.//wd:Customer_Data')
+        csv_content: str = currency_service.generate_csv(
+            list(all_customers),
+            [
+                ("customer_id", lambda o: o.Customer_ID if o else None),
+                ("Customer_Reference_ID", lambda o: o.Customer_Reference_ID if o else None),
+                ("Customer_Name", lambda o: o.Customer_Name if o else None),
+                ("Customer_Category_ID", lambda o: o.Customer_Category_ID if o else None),
+                ("Customer_Group_ID", lambda o: o.Customer_Group_ID if o else None),
+                ("Payment_Terms_ID", lambda o: o.Payment_Terms_ID if o else None),
+                ("Worktag_Only", lambda o: o.Worktag_Only if o else None),
+                ("Exempt", lambda o: o.Exempt if o else None),
+                ("Submit", lambda o: o.Submit if o else None),
+                ("Exempt_From_Dunning", lambda o: o.Submit if o else None),
+
+                ("credit_limit", lambda o: o.credit_limit if o else None),
+                ("hierarchy_credit_limit", lambda o: o.hierarchy_credit_limit if o else None),
+                ("credit_verification_date", lambda o: o.credit_verification_date if o else None),
+                ("DUNS_number", lambda o: o.DUNS_number if o else None),
+
+                ("Customer_Satisfaction_Score", lambda o: o.Customer_Satisfaction_Score if o else None),
+                ("Composite_Risk_Score", lambda o: o.Composite_Risk_Score if o else None),
+                ("Composite_Risk_Date", lambda o: o.Composite_Risk_Date if o else None),
+                ("Composite_Risk_Note", lambda o: o.Composite_Risk_Note if o else None),
+            ],
+            filename='generated_csv/customers',
+            prod=IS_PROD
+        )
+        if IS_PROD:
+            return {"master_data_csv": csv_content}
+
 
 if __name__ == '__main__':
     workday = 'workday_url.com'
@@ -441,5 +527,6 @@ if __name__ == '__main__':
         "workday_refresh_token": refresh_token,
         "is_test": "true",
         "integration_scope": "8",
-        "api_version": "v42.1"
+        # "api_version": "v42.1"
+        "api_version": "v43.1"
     })

@@ -12,15 +12,21 @@ class CSVJournalHelper:
     def __init__(self):
         # you can reorganize header by switching index here
         self.fields = [
+            ("journal_workday_id", lambda j: j.journal_workday_id if j else None),
             ("journal_id", lambda j: j.journal_id if j else None),
             ("document_number", lambda j: j.document_info.document_number if j and j.document_info else None),
+
+            ("status", lambda j: j.journal_status if j.journal_status else None),
             ("accounting_period_name", lambda j: j.accounting_period_name if j else None),
+            ("creation_date", lambda j: j.creation_Date if j else None),
             ("document_description", lambda j: j.document_info.description.replace('\n', ' ') if j and j.document_info and j.document_info.description else None),
             ("book_code_id", lambda j: j.book_code_info.book_code_id if j and j.book_code_info else None),
             ("book_code_name", lambda j: j.book_code_info.name if j and j.book_code_info else None),
             ("ledger_code", lambda j: j.account_info.code if j and j.account_info else None),
             ("pl_info_destination", lambda j: j.pl_info_destination if j else None),
-            ("journal_source", lambda j: j.journal_source if j else None)
+            ("journal_source", lambda j: j.journal_source if j else None),
+            ("external", lambda j: j.external_ref_id if j else None),
+            ("ledger_currency", lambda j: j.ledger_currency if j else None),
         ]
 
         self.entry_line_fields = [
@@ -37,6 +43,10 @@ class CSVJournalHelper:
             ("subsidiary_internal_id", lambda j: j.subsidiary_info.internal_id if j.subsidiary_info else None),
             ("subsidiary_name", lambda j: j.subsidiary_info.name if j.subsidiary_info else None),
 
+            ("vendor_code", lambda j: j.vendor_info.vendor_code if j.vendor_info else None),
+            ("vendor_company_name", lambda j: j.vendor_info.company_name if j.vendor_info else None),
+            ("vendor_approval_status", lambda j: j.vendor_info.approval_status if j.vendor_info else None),
+
             ("debit", lambda j: j.amount_info.debit if j.amount_info else None),
             ("credit", lambda j: j.amount_info.credit if j.amount_info else None),
             ("ledger_debit", lambda j: j.amount_info.ledger_debit if j.amount_info else None),
@@ -47,7 +57,7 @@ class CSVJournalHelper:
             ("cost_center_code", lambda j: j.cost_center_info.code if j.cost_center_info else None),
             ("cost_center_name", lambda j: j.cost_center_info.name if j.cost_center_info else None),
 
-            ("revenue_name", lambda j: j.revenue_info.revenue_name if j.revenue_info else None),
+            ("revenue_category", lambda j: j.revenue_info.revenue_name if j.revenue_info else None),
 
             ("acquisition_channel_dim_id",
              lambda j: j.revenue_info.gtm_org.dimension_id if j.revenue_info.gtm_org else None),
@@ -55,11 +65,11 @@ class CSVJournalHelper:
             ("acquisition_channel_dim_name",
              lambda j: j.revenue_info.gtm_org.dimension_name if j.revenue_info.gtm_org else None),
 
-            ("vendor_code", lambda j: j.revenue_info.deal.customer_contract_id if j.revenue_info.deal else None),
-            ("vendor_company_name", lambda j: j.revenue_info.deal.contract_name if j.revenue_info.deal else None),
-            ("vendor_po", lambda j: j.revenue_info.deal.po_number if j.revenue_info.deal else None),
-            ("vendor_on_hold", lambda j: j.revenue_info.deal.on_hold if j.revenue_info.deal else None),
-            ("vendor_contract_type", lambda j: j.revenue_info.deal.contract_type if j.revenue_info.deal else None),
+            ("deal_code", lambda j: j.revenue_info.deal.customer_contract_id if j.revenue_info.deal else None),
+            ("deal_company_name", lambda j: j.revenue_info.deal.contract_name if j.revenue_info.deal else None),
+            ("deal_po", lambda j: j.revenue_info.deal.po_number if j.revenue_info.deal else None),
+            ("deal_on_hold", lambda j: j.revenue_info.deal.on_hold if j.revenue_info.deal else None),
+            ("deal_contract_type", lambda j: j.revenue_info.deal.contract_type if j.revenue_info.deal else None),
 
             ("project_code", lambda j: j.project_code),
 
@@ -67,6 +77,7 @@ class CSVJournalHelper:
             ("expense_type_name", lambda j: j.expense_type.name if j.expense_type else None),
 
             ("memo", lambda j: j.memo.replace('\n', ' ') if j.memo else None),
+            ("destination", lambda j: j.destination),
         ]
 
         self.entries_prefix = "entry_line"

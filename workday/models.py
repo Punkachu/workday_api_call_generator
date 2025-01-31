@@ -68,7 +68,8 @@ class LedgerAccount:
     WID: str
     Ledger_Account_Name: str
     Types: str
-    # Ledger_Account_Summary: Optional[str]
+    Ledger_Account_Summary: Optional[str]  # aka Group Code
+    Ledger_Account_Summary_ID: Optional[str]
     Account_Sets: Optional[list]
 
 
@@ -110,6 +111,8 @@ class WorktagsReference:
     cash_flow_code: Optional[str] = None
     # Customer ID
     customer_id: Optional[str] = None
+    # Destination
+    destination_id_cust_worktag_4: Optional[str] = None
 
 
 @dataclass
@@ -135,8 +138,10 @@ class JournalEntryLine:
 
 @dataclass
 class JournalEntry:
+    journal_workday_id: Optional[str] = None
     journal_Number: Optional[str] = None
     journal_Sequence_Number: Optional[str] = None
+
     accounting_Date: Optional[str] = None
     record_Quantity: Optional[int] = None
     total_Ledger_Debits: Optional[float] = None
@@ -146,6 +151,7 @@ class JournalEntry:
     description: Optional[str] = None
     # P& L Destination
     custom_Worktag_4_ID: Optional[str] = None
+    External_Reference_ID: Optional[str] = None
 
     book_code: Optional[BookCodeInfo] = None
     journalEntryReference: Optional[JournalEntryReference] = None
@@ -281,6 +287,54 @@ class CostCenterInfo:
 
 
 @dataclass
+class LedgerAccountHierarchy:
+    ledger_account_id: Optional[str] = None
+    ledger_account_name: Optional[str] = None
+    # Complementary data from LA endpoint
+    ledger_account_type: Optional[str] = None
+    ledger_account_summary_name: Optional[str] = None
+    ledger_account_summary_id: Optional[str] = None
+
+    management_view_lvl_1_id: Optional[str] = None
+    management_view_lvl_1_name: Optional[str] = None
+
+    management_view_lvl_2_id: Optional[str] = None
+    management_view_lvl_2_name: Optional[str] = None
+
+    management_view_lvl_3_id: Optional[str] = None
+    management_view_lvl_3_name: Optional[str] = None
+
+    management_view_lvl_4_id: Optional[str] = None
+    management_view_lvl_4_name: Optional[str] = None
+
+
+@dataclass
+class CustomerInfo:
+    Customer_ID: Optional[str] = None
+    Customer_Reference_ID: Optional[str] = None
+    Customer_Name: Optional[str] = None
+
+    Customer_Category_ID: Optional[str] = None
+    Customer_Group_ID: Optional[str] = None
+    Payment_Terms_ID: Optional[str] = None
+
+    Worktag_Only: Optional[bool] = None
+    Exempt: Optional[bool] = None
+    Submit: Optional[bool] = None
+    Exempt_From_Dunning: Optional[bool] = None
+
+    credit_limit: Optional[float] = None
+    hierarchy_credit_limit: Optional[float] = None
+    credit_verification_date: Optional[str] = None
+    DUNS_number: Optional[str] = None
+
+    Customer_Satisfaction_Score: Optional[float] = None
+    Composite_Risk_Score: Optional[float] = None
+    Composite_Risk_Date: Optional[str] = None
+    Composite_Risk_Note: Optional[str] = None
+
+
+@dataclass
 class VendorInfo:
     vendor_code: Optional[str] = None
     vendor_ref_id: Optional[str] = None
@@ -343,6 +397,7 @@ class MappedEntryJournal:
     # Fields
     project_code: Optional[str] = None
     memo: Optional[str] = None
+    destination: Optional[str] = None
     cash_flow_code: Optional[str] = None
     customer_id: Optional[str] = None
 
@@ -355,10 +410,16 @@ class MappedJournal:
     mapped_entries: Optional[List[MappedEntryJournal]] = None
 
     journal_id: Optional[str] = None
+    journal_workday_id: Optional[str] = None
+    creation_Date: Optional[str] = None
+
     pl_info_destination: Optional[str] = None
     accounting_period_name: Optional[str] = None
     # Is Allocation
     journal_source: Optional[str] = None
+    external_ref_id: Optional[str] = None
+    journal_status: Optional[str] = None
+    ledger_currency: Optional[str] = None
 
 
 @dataclass
@@ -379,7 +440,7 @@ class FailedProcessedJournal:
     data: Optional[Any] = None
 
 
-###  ORKDAY DATA CLASS
+###  WORKDAY DATA CLASS
 
 @dataclass
 class WORKDAYCurrency:
